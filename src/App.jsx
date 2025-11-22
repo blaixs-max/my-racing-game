@@ -4,7 +4,7 @@ import { PerspectiveCamera, Stars, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import { create } from 'zustand';
 
-// --- 1. OYUN VERİ MERKEZİ (STATE MANAGEMENT) ---
+// --- 1. OYUN VERİ MERKEZİ ---
 const useGameStore = create((set, get) => ({
   gameState: 'menu',
   countdown: 3,
@@ -53,10 +53,8 @@ const useGameStore = create((set, get) => ({
     set({ gameState: 'menu', gameOver: false, score: 0, speed: 0 });
   },
   
-  // DİREKSİYON KONTROLÜ (GÜNCELLENDİ: Orta seviye hassasiyet)
   steer: (direction) => set((state) => {
     if (state.gameState !== 'playing') return {};
-    // Adım boyutu 1.25 yapıldı. Hem hassas hem de yeterince hızlı.
     const step = 1.25;
     let newX = state.targetX + (direction * step);
     if (newX > 5.0) newX = 5.0;
@@ -144,23 +142,19 @@ const useGameStore = create((set, get) => ({
   setGameOver: () => set({ gameOver: true, gameState: 'gameover', speed: 0, targetSpeed: 0 })
 }));
 
-// --- YENİ BİLEŞEN: MOBİL DOKUNMATİK KONTROLLER ---
+// --- YENİ BİLEŞEN: MOBİL DOKUNMATİK KONTROLLER (SADECE DOKUNMATİK) ---
 function MobileControls() {
   const { steer } = useGameStore();
-  // Basılı tutma işlemini yönetmek için bir interval referansı
   const intervalRef = useRef(null);
 
-  // Hareketi başlat (Dokunma veya fare basma)
   const startSteering = (direction) => {
-    if (intervalRef.current) return; // Zaten hareket ediyorsa tekrar başlatma
-    steer(direction); // İlk dokunuşta hemen bir adım git
-    // Basılı tutulduğu sürece her 50ms'de bir tetikle (Klavye tekrarı gibi)
+    if (intervalRef.current) return;
+    steer(direction);
     intervalRef.current = setInterval(() => {
       steer(direction);
     }, 50);
   };
 
-  // Hareketi durdur (Parmağı kaldırma veya fareyi bırakma)
   const stopSteering = () => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -168,25 +162,21 @@ function MobileControls() {
     }
   };
 
-  // Olay dinleyicilerini oluştur (Hem dokunmatik hem fare için)
+  // DÜZELTME: Mouse olayları kaldırıldı, sadece Touch (Dokunmatik) kaldı.
+  // Böylece PC'de mouse ile kontrol engellendi.
   const handlers = (direction) => ({
-    onTouchStart: (e) => { e.preventDefault(); startSteering(direction); }, // Sayfa kaydırmayı önle
+    onTouchStart: (e) => { e.preventDefault(); startSteering(direction); },
     onTouchEnd: (e) => { e.preventDefault(); stopSteering(); },
-    onMouseDown: () => startSteering(direction),
-    onMouseUp: stopSteering,
-    onMouseLeave: stopSteering, // Alanın dışına çıkarsa da durdur
   });
 
   return (
     <>
-      {/* Sol Ekran Kontrol Alanı (Görünmez) */}
       <div
-        style={{ position: 'absolute', top: 0, left: 0, width: '50%', height: '100%', zIndex: 40, /* background: 'rgba(255,0,0,0.2)' // Test için açılabilir */ }}
+        style={{ position: 'absolute', top: 0, left: 0, width: '50%', height: '100%', zIndex: 40, touchAction: 'none' }}
         {...handlers(-1)}
       />
-      {/* Sağ Ekran Kontrol Alanı (Görünmez) */}
       <div
-        style={{ position: 'absolute', top: 0, right: 0, width: '50%', height: '100%', zIndex: 40, /* background: 'rgba(0,255,0,0.2)' // Test için açılabilir */ }}
+        style={{ position: 'absolute', top: 0, right: 0, width: '50%', height: '100%', zIndex: 40, touchAction: 'none' }}
         {...handlers(1)}
       />
     </>
@@ -241,6 +231,7 @@ function PlayerCar() {
     const currentX = group.current.position.x;
     group.current.position.x = THREE.MathUtils.lerp(currentX, targetX, delta * 5); 
     
+    // DÜZELTME: Sallanma (Body Roll) sıfıra yakın (0.002)
     const moveDiff = (group.current.position.x - currentX) / delta;
     group.current.rotation.z = -moveDiff * 0.002; 
     group.current.rotation.x = -speed * 0.0002; 
@@ -278,6 +269,7 @@ function PlayerCar() {
   const neonMat = new THREE.MeshStandardMaterial({ color: '#00ffff', emissive: '#00ffff', emissiveIntensity: 2 });
 
   return (
+    // DÜZELTME: Y pozisyonu 0.1 olarak ayarlandı (Clipping önleyici)
     <group ref={group} position={[0, 0.1, -2]}>
       <primitive object={leftTarget.current} />
       <primitive object={rightTarget.current} />
@@ -366,7 +358,6 @@ function Traffic() {
             {enemy.type === 'sedan' && (
                <group>
                  <mesh position={[0, 0.7, 0]} material={sedanMat} castShadow><boxGeometry args={[2.0, 0.8, 4.2]} /></mesh>
-                 <mesh position={[0, 1.1, -0.3]} material={new THREE.MeshStandardMaterial({color:'#222'})}><boxGeometry args={[1.8, 0.5, 2.2]} /></mesh>
                  <mesh position={[-0.8, 0.6, 2.2]} material={tailLightMat}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
                  <mesh position={[0.8, 0.6, 2.2]} material={tailLightMat}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
                </group>
@@ -514,15 +505,16 @@ function RoadEnvironment() {
       <Barrier x={10.5} />
       <SideObjects side={1} />
       <SideObjects side={-1} />
+      
+      {/* ZEMİN RENGİ (DAHA AÇIK YEŞİL) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]}>
           <planeGeometry args={[2000, 2000]} />
-          <meshStandardMaterial color="#113311" roughness={1.0} />
+          <meshStandardMaterial color="#2e5a2e" roughness={1.0} />
       </mesh>
     </group>
   );
 }
 
-// --- 8. HIZ EFEKTİ ---
 function SpeedLines() {
   const { speed } = useGameStore();
   const lines = useMemo(() => new Array(100).fill(0).map(() => ({ x: (Math.random() - 0.5) * 50, y: Math.random() * 15, z: (Math.random() - 0.5) * 200, len: Math.random() * 20 + 10 })), []);
@@ -543,7 +535,7 @@ function SpeedLines() {
   );
 }
 
-// --- 9. GÖKYÜZÜ ---
+// --- GÖKYÜZÜ ---
 function SkyEnvironment() {
   return (
     <group>
@@ -573,22 +565,34 @@ export default function App() {
     };
   }, []);
 
-  // GÜNCELLENDİ: Mesaj Rengi ve Stili (Neon Cyan Geri Döndü)
+  // MESAJ RENGİ (NEON CYAN VE KIRMIZI)
   const isGoldMessage = message.includes("GOLD");
-  const messageColor = isGoldMessage ? '#00ffff' : '#ff0000'; // Neon Cyan veya Kırmızı
+  const messageColor = isGoldMessage ? '#00ffff' : '#ff0000'; 
   const messageShadow = isGoldMessage ? '0 0 20px #00ffff' : '0 0 30px red';
 
-  // GÜNCELLENDİ: Skor Rengi ve Stili (Neon Cyan)
+  // SKOR STİLİ (NEON CYAN)
   const scoreStyle = {
     color: '#00ffff',
     textShadow: '0 0 20px #00ffff',
     fontWeight: 'bold'
   };
 
+  // DOKUNMATİK KONTROLLER (OTOMATİK TAM EKRAN)
+  const handleStart = () => {
+    // Tam Ekran İsteği
+    const elem = document.documentElement;
+    if (elem.requestFullscreen) {
+      elem.requestFullscreen().catch(err => console.log(err));
+    } else if (elem.webkitRequestFullscreen) { /* Safari */
+      elem.webkitRequestFullscreen();
+    }
+    startGame();
+  }
+
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a15', overflow: 'hidden' }}>
       
-      {/* MOBİL KONTROLLER (Sadece oyun sırasında aktif) */}
+      {/* MOBİL KONTROLLER (SADECE OYUNDA) */}
       {gameState === 'playing' && <MobileControls />}
 
       {/* COUNTDOWN */}
@@ -598,10 +602,10 @@ export default function App() {
         </div>
       )}
 
-      {/* MENÜ */}
+      {/* MENÜ (START BUTONU TAM EKRAN YAPAR) */}
       {gameState === 'menu' && (
          <div style={{ position: 'absolute', zIndex: 60, inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)' }}>
-            <button onClick={startGame} style={{ padding: '20px 60px', fontSize: '30px', background: '#00ff00', color:'#000', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #00ff00' }}>START RACE</button>
+            <button onClick={handleStart} style={{ padding: '20px 60px', fontSize: '30px', background: '#00ff00', color:'#000', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #00ff00' }}>START RACE</button>
          </div>
       )}
 
@@ -615,20 +619,19 @@ export default function App() {
           border: '2px solid #555', borderRadius: '10px', padding: '10px 30px',
           transform: 'skewX(-15deg)', zIndex: 10, color: '#fff', textAlign: 'right', boxShadow: '0 5px 15px rgba(0,0,0,0.5)'
       }}>
-        {/* GÜNCELLENDİ: Skor Başlığı ve Değeri Neon Cyan Oldu */}
         <div style={{ fontSize: '12px', ...scoreStyle, transform: 'skewX(15deg)' }}>SCORE</div>
         <div style={{ fontSize: '40px', ...scoreStyle, transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
       </div>
 
       {combo > 1 && <div style={{ position: 'absolute', top: 120, right: 30, fontSize: '40px', color: '#00ff00', fontWeight: 'bold', zIndex: 10, textShadow: '0 0 15px lime' }}>{combo}x COMBO</div>}
       
-      {/* MESAJ ALANI (GÜNCELLENDİ: Dinamik Renk/Gölge) */}
-      {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: messageColor, fontSize: '80px', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: messageShadow, textTransform: 'uppercase', letterSpacing: '2px' }}>{message}</div>}
+      {/* MOBİL YAZI BOYUTU (DÜZELTİLDİ) */}
+      {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: messageColor, fontSize: 'clamp(30px, 8vw, 80px)', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: messageShadow, textTransform: 'uppercase', letterSpacing: '2px', whiteSpace: 'nowrap' }}>{message}</div>}
 
-      {/* GAME OVER MENÜSÜ */}
+      {/* GAME OVER */}
       {gameOver && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(50,0,0,0.95)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Arial' }}>
-          <h1 style={{ fontSize: '80px', color: '#ff0000', margin: '0 0 20px 0', textShadow: '0 0 30px red', textTransform: 'uppercase' }}>YOU CRASHED</h1>
+          <h1 style={{ fontSize: 'clamp(40px, 10vw, 80px)', color: '#ff0000', margin: '0 0 20px 0', textShadow: '0 0 30px red', textTransform: 'uppercase', textAlign: 'center' }}>YOU CRASHED</h1>
           <h2 style={{ color: '#fff', fontSize: '30px', marginBottom: '40px' }}>FINAL SCORE: {Math.floor(score)}</h2>
           
           <div style={{ display: 'flex', gap: '20px' }}>
