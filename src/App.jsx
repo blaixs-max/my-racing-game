@@ -4,50 +4,151 @@ import { PerspectiveCamera, Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import { create } from 'zustand';
 
-// --- 1. OYUN AYARLARI ---
+// --- 1. OYUN VERİ MERKEZİ ---
 const useGameStore = create((set, get) => ({
+  gameState: 'countdown', // 'countdown', 'playing', 'gameover'
+  countdown: 5,
   speed: 0,
   targetSpeed: 20,
   lane: 1, 
   score: 0,
   combo: 1,
-  lastComboTime: 0,
-  gameOver: false,
   enemies: [],
+  coins: [], // Altınlar
   message: "", 
-  startGame: () => set({ speed: 20, targetSpeed: 90, score: 0, combo: 1, gameOver: false, enemies: [], message: "", lane: 1 }),
+  
+  startGame: () => {
+    // Reset ve Countdown başlat
+    set({ 
+      gameState: 'countdown', 
+      countdown: 5, 
+      speed: 0, 
+      targetSpeed: 0, // Countdown sırasında hareket yok
+      score: 0, 
+      combo: 1, 
+      enemies: [], 
+      coins: [],
+      message: "", 
+      lane: 1 
+    });
+
+    // Geri sayım sayacı
+    let count = 5;
+    const timer = setInterval(() => {
+      count--;
+      if (count > 0) {
+        set({ countdown: count });
+      } else if (count === 0) {
+        set({ countdown: "RACE!" });
+      } else {
+        clearInterval(timer);
+        set({ gameState: 'playing', countdown: null, speed: 20, targetSpeed: 90 });
+      }
+    }, 1000);
+  },
+  
   changeLane: (direction) => set((state) => {
-    if (state.gameOver) return {};
+    if (state.gameState !== 'playing') return {};
     return { lane: Math.max(0, Math.min(2, state.lane + direction)) };
   }),
-  accelerate: () => set((state) => !state.gameOver && { targetSpeed: 380 }),
-  decelerate: () => set((state) => !state.gameOver && { targetSpeed: 90 }),
+  
+  accelerate: () => set((state) => state.gameState === 'playing' && { targetSpeed: 380 }),
+  decelerate: () => set((state) => state.gameState === 'playing' && { targetSpeed: 90 }),
+  
+  collectCoin: (id) => set((state) => ({
+    score: state.score + 100, // Altın değeri
+    coins: state.coins.filter(c => c.id !== id),
+    message: "+100 GOLD"
+  })),
+
   triggerNearMiss: () => {
     const { combo, score } = get();
-    set({ combo: Math.min(combo + 1, 10), score: score + (500 * combo), message: `MAKAS! ${combo}x`, lastComboTime: Date.now() });
+    set({ combo: Math.min(combo + 1, 10), score: score + (500 * combo), message: `MAKAS! ${combo}x` });
     setTimeout(() => set({ message: "" }), 1000);
   },
+
   updateGame: (delta) => set((state) => {
-    if (state.gameOver) return { speed: 0, targetSpeed: 0 };
+    if (state.gameState !== 'playing') return { speed: 0 };
+
     const newSpeed = THREE.MathUtils.lerp(state.speed, state.targetSpeed, delta * 3);
     const newScore = state.score + (newSpeed * delta * 0.2);
-    let newCombo = state.combo;
-    if (Date.now() - state.lastComboTime > 3000 && state.combo > 1) newCombo = 1;
-    let newEnemies = state.enemies.map(e => ({ ...e, z: e.z + (newSpeed * delta * 0.5), passed: e.passed || false })).filter(e => e.z < 100); 
-    const spawnRate = 0.02 + (newSpeed / 10000); 
-    if (Math.random() < spawnRate && newEnemies.length < 7) {
-      const randomLane = Math.floor(Math.random() * 3); 
-      const r = Math.random();
-      let type = 'sedan';
-      if (r > 0.7) type = 'truck';
-      newEnemies.push({ id: Math.random(), lane: randomLane, z: -400 - Math.random() * 200, passed: false, type });
+
+    // --- HAREKETLER ---
+    
+    // 1. Düşman Hareketi
+    let newEnemies = state.enemies.map(e => ({
+      ...e,
+      z: e.z + (newSpeed - e.ownSpeed * 0.5) * delta * 0.5,
+      x: e.isChanging ? e.x + (e.targetLane > e.lane ? 1 : -1) * delta * 5 : e.x
+    })).filter(e => e.z < 50);
+
+    // 2. Altın Hareketi
+    let newCoins = state.coins.map(c => ({
+      ...c,
+      z: c.z + newSpeed * delta * 0.5
+    })).filter(c => c.z < 50);
+
+    // --- SPAWN MANTIĞI (Zorluk & Oynanabilirlik) ---
+    
+    // Skor arttıkça spawn oranı artar ama bir tavanı vardır
+    const difficultyMultiplier = Math.min(state.score / 50000, 0.08); 
+    const spawnRate = 0.02 + difficultyMultiplier; 
+
+    if (Math.random() < spawnRate && newEnemies.length < 12) {
+      const randomLane = Math.floor(Math.random() * 3);
+      
+      // GÜVENLİK: 3 şerit de dolu mu? Eğer doluysa spawn yapma.
+      // O anki en uzak Z noktasına bakıyoruz.
+      const obstaclesInZone = newEnemies.filter(e => e.z < -300 && e.z > -450).length;
+      
+      // Eğer o bölgede zaten 2 araç varsa, 3.yü koyma ki geçiş yolu kalsın.
+      if (obstaclesInZone < 2) {
+         // Çakışma kontrolü (Hem araba hem coin)
+         const isSafeCar = !newEnemies.some(e => e.lane === randomLane && Math.abs(e.z - -400) < 40);
+         const isSafeCoin = !newCoins.some(c => c.lane === randomLane && Math.abs(c.z - -400) < 40);
+
+         if (isSafeCar && isSafeCoin) {
+            const r = Math.random();
+            let type = 'sedan';
+            if (r > 0.7) type = 'truck';
+            else if (r > 0.9) type = 'bus';
+            
+            newEnemies.push({ 
+              id: Math.random(), 
+              lane: randomLane, 
+              x: (randomLane - 1) * 4.5, 
+              z: -400 - Math.random() * 100, 
+              type, 
+              ownSpeed: 80 + Math.random() * 40,
+              passed: false 
+            });
+         }
+      }
     }
-    return { speed: newSpeed, score: newScore, enemies: newEnemies, combo: newCombo };
+
+    // ALTIN SPAWN (Daha seyrek)
+    if (Math.random() < 0.02 && newCoins.length < 5) {
+        const coinLane = Math.floor(Math.random() * 3);
+        const isSafeCar = !newEnemies.some(e => e.lane === coinLane && Math.abs(e.z - -400) < 40);
+        const isSafeCoin = !newCoins.some(c => c.lane === coinLane && Math.abs(c.z - -400) < 40);
+
+        if (isSafeCar && isSafeCoin) {
+            newCoins.push({
+                id: Math.random(),
+                lane: coinLane,
+                x: (coinLane - 1) * 4.5,
+                z: -400 - Math.random() * 50
+            });
+        }
+    }
+
+    return { speed: newSpeed, score: newScore, enemies: newEnemies, coins: newCoins };
   }),
-  setGameOver: () => set({ gameOver: true, speed: 0, targetSpeed: 0 })
+
+  setGameOver: () => set({ gameState: 'gameover', speed: 0, targetSpeed: 0 })
 }));
 
-// --- 2. HIZ GÖSTERGESİ ---
+// --- 2. GÖSTERGELER (UI) ---
 function Speedometer({ speed }) {
   const maxSpeed = 360;
   const angle = -135 + (speed / maxSpeed) * 270;
@@ -80,7 +181,7 @@ function Speedometer({ speed }) {
 
 // --- 3. OYUNCU ARABASI ---
 function PlayerCar() {
-  const { lane, enemies, setGameOver, gameOver, triggerNearMiss, speed } = useGameStore();
+  const { lane, enemies, coins, setGameOver, gameOver, triggerNearMiss, collectCoin, speed } = useGameStore();
   const group = useRef();
   const wheels = useRef([]);
   
@@ -93,21 +194,32 @@ function PlayerCar() {
 
   useFrame((state, delta) => {
     if (gameOver) return;
+    
+    // HAREKET
     group.current.position.x = THREE.MathUtils.lerp(group.current.position.x, targetX, delta * 10);
-    const tilt = (group.current.position.x - targetX) * 0.1;
+    const tilt = (group.current.position.x - targetX) * 0.15;
     group.current.rotation.z = tilt; 
     group.current.rotation.x = -speed * 0.0002; 
     wheels.current.forEach(w => { if(w) w.rotation.x += speed * delta * 0.1; });
 
+    // TRAFİK ÇARPIŞMA & MAKAS
     enemies.forEach(enemy => {
-      const enemyX = (enemy.lane - 1) * 4.5;
-      const dx = Math.abs(group.current.position.x - enemyX);
+      const dx = Math.abs(group.current.position.x - enemy.x);
       const dz = Math.abs(enemy.z - (-2)); 
       if (dz < 3.8 && dx < 2.0) setGameOver();
       if (!enemy.passed && dz < 7.0 && dx > 2.2 && dx < 5.0) {
         enemy.passed = true; 
         triggerNearMiss();   
       }
+    });
+
+    // ALTIN TOPLAMA
+    coins.forEach(coin => {
+        const dx = Math.abs(group.current.position.x - coin.x);
+        const dz = Math.abs(coin.z - (-2));
+        if (dz < 2.0 && dx < 1.5) {
+            collectCoin(coin.id);
+        }
     });
   });
 
@@ -146,7 +258,36 @@ function PlayerCar() {
   );
 }
 
-// --- 4. TRAFİK ---
+// --- 4. TRAFİK VE ALTINLAR ---
+function Coins() {
+    const coins = useGameStore(state => state.coins);
+    const coinMat = new THREE.MeshStandardMaterial({ color: '#FFD700', metalness: 1, roughness: 0.3, emissive: '#AA8800', emissiveIntensity: 0.5 });
+
+    return (
+        <>
+            {coins.map(coin => (
+                <group key={coin.id} position={[coin.x, 1, coin.z]}>
+                    <mesh rotation={[0, 0, Math.PI / 2]} material={coinMat}>
+                        <cylinderGeometry args={[0.6, 0.6, 0.2, 16]} />
+                    </mesh>
+                    {/* Dönme Animasyonu için basit component */}
+                    <CoinAnimation />
+                </group>
+            ))}
+        </>
+    )
+}
+
+function CoinAnimation() {
+    const ref = useRef();
+    useFrame(() => {
+        if(ref.current) {
+            ref.current.parent.rotation.y += 0.05;
+        }
+    });
+    return <mesh ref={ref} visible={false} />;
+}
+
 function Traffic() {
   const enemies = useGameStore(state => state.enemies);
   const truckMat = new THREE.MeshStandardMaterial({ color: '#335577', roughness: 0.5 }); 
@@ -158,7 +299,7 @@ function Traffic() {
   return (
     <>
       {enemies.map(enemy => {
-        const x = (enemy.lane - 1) * 4.5;
+        const x = enemy.x; 
         return (
           <group key={enemy.id} position={[x, 0, enemy.z]}>
             {enemy.type === 'truck' && (
@@ -335,7 +476,6 @@ function RoadEnvironment() {
       <SideObjects side={1} />
       <SideObjects side={-1} />
       
-      {/* ZEMİN (YEŞİL ÇİM) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]}>
           <planeGeometry args={[2000, 2000]} />
           <meshStandardMaterial color="#2e8b57" roughness={1.0} metalness={0.0} />
@@ -368,13 +508,10 @@ function SpeedLines() {
   );
 }
 
-// --- GÖKYÜZÜ (PROCEDURAL - HATA VERMEZ) ---
 function SkyEnvironment() {
   return (
     <group>
-      {/* Yıldızlar */}
       <Stars radius={150} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
-      {/* Ay */}
       <mesh position={[50, 80, -200]}>
         <sphereGeometry args={[10, 32, 32]} />
         <meshBasicMaterial color="#ffffff" />
@@ -385,9 +522,10 @@ function SkyEnvironment() {
 }
 
 export default function App() {
-  const { speed, score, combo, message, gameOver, startGame, accelerate, decelerate, changeLane } = useGameStore();
+  const { speed, score, combo, message, gameOver, gameState, countdown, startGame, accelerate, decelerate, changeLane } = useGameStore();
+  
   useEffect(() => {
-    startGame();
+    // İlk açılışta menü göster, startGame butona bağlanacak
     const handleKeyDown = (e) => {
       if (e.key === 'ArrowLeft') changeLane(-1);
       if (e.key === 'ArrowRight') changeLane(1);
@@ -405,14 +543,43 @@ export default function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a15', overflow: 'hidden' }}>
       
+      {/* COUNTDOWN EKRANI */}
+      {gameState === 'countdown' && (
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+           <h1 style={{ fontSize: '150px', color: '#00ff00', textShadow: '0 0 20px #fff', fontStyle: 'italic' }}>{countdown}</h1>
+        </div>
+      )}
+
+      {/* BAŞLANGIÇ MENÜSÜ */}
+      {gameState === undefined && (
+         <div style={{ position: 'absolute', zIndex: 60, inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)' }}>
+            <button onClick={startGame} style={{ padding: '20px 50px', fontSize: '30px', background: '#00ff00', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }}>START RACE</button>
+         </div>
+      )}
+
+      {/* HUD */}
       <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 10, pointerEvents: 'none' }}>
         <Speedometer speed={speed} />
       </div>
 
-      <div style={{ position: 'absolute', top: 230, left: 20, color: '#fff', zIndex: 10, fontFamily: 'Arial', pointerEvents: 'none' }}>
-        <div style={{ fontSize: '24px', color: '#ddd' }}>SKOR: {Math.floor(score)}</div>
-        {combo > 1 && <div style={{ fontSize: '40px', color: '#00ff00', fontWeight: 'bold', marginTop: '10px', textShadow: '0 0 15px lime' }}>{combo}x COMBO</div>}
+      {/* YENİ SCOREBOARD TASARIMI */}
+      <div style={{ 
+          position: 'absolute', top: 20, right: 20, 
+          background: 'linear-gradient(135deg, #333 0%, #000 100%)',
+          border: '2px solid #555',
+          borderRadius: '10px',
+          padding: '10px 20px',
+          transform: 'skewX(-15deg)',
+          zIndex: 10,
+          color: '#fff',
+          textAlign: 'right',
+          boxShadow: '0 5px 15px rgba(0,0,0,0.5)'
+      }}>
+        <div style={{ fontSize: '12px', color: '#00ff00', fontWeight: 'bold', transform: 'skewX(15deg)' }}>SCORE</div>
+        <div style={{ fontSize: '32px', fontWeight: 'bold', transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
       </div>
+
+      {combo > 1 && <div style={{ position: 'absolute', top: 100, right: 30, fontSize: '40px', color: '#00ff00', fontWeight: 'bold', zIndex: 10, textShadow: '0 0 15px lime' }}>{combo}x COMBO</div>}
 
       {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: '#fff', fontSize: '80px', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: '0 0 20px cyan' }}>{message}</div>}
 
@@ -425,13 +592,16 @@ export default function App() {
 
       <Canvas shadows>
         <PerspectiveCamera makeDefault position={[0, 6, 14]} fov={55} />
+        
         <ambientLight intensity={0.6} color="#ffffff" /> 
         <hemisphereLight skyColor="#445566" groundColor="#223344" intensity={0.6} />
+
         <Suspense fallback={null}>
            <SkyEnvironment />
            <SpeedLines />
            <PlayerCar />
            <Traffic />
+           <Coins />
            <RoadEnvironment />
         </Suspense>
       </Canvas>
