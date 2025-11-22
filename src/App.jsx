@@ -4,174 +4,152 @@ import { PerspectiveCamera, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import { create } from 'zustand';
 
-// --- 1. OYUN AYARLARI ---
+// --- 1. OYUN VERİ MERKEZİ (GELİŞMİŞ AI) ---
 const useGameStore = create((set, get) => ({
   speed: 0,
   targetSpeed: 20,
   lane: 1, 
   score: 0,
   combo: 1,
-  lastComboTime: 0,
   gameOver: false,
-  enemies: [],
-  message: "", 
-  startGame: () => set({ speed: 20, targetSpeed: 90, score: 0, combo: 1, gameOver: false, enemies: [], message: "", lane: 1 }),
+  enemies: [], // Düşmanlar artık daha akıllı objeleler
+  
+  startGame: () => set({ speed: 20, targetSpeed: 90, score: 0, combo: 1, gameOver: false, enemies: [], lane: 1 }),
+  
   changeLane: (direction) => set((state) => {
     if (state.gameOver) return {};
     return { lane: Math.max(0, Math.min(2, state.lane + direction)) };
   }),
+  
   accelerate: () => set((state) => !state.gameOver && { targetSpeed: 380 }),
   decelerate: () => set((state) => !state.gameOver && { targetSpeed: 90 }),
-  triggerNearMiss: () => {
-    const { combo, score } = get();
-    set({ combo: Math.min(combo + 1, 10), score: score + (500 * combo), message: `MAKAS! ${combo}x`, lastComboTime: Date.now() });
-    setTimeout(() => set({ message: "" }), 1000);
-  },
+  
   updateGame: (delta) => set((state) => {
     if (state.gameOver) return { speed: 0, targetSpeed: 0 };
-    const newSpeed = THREE.MathUtils.lerp(state.speed, state.targetSpeed, delta * 3);
+
+    const newSpeed = THREE.MathUtils.lerp(state.speed, state.targetSpeed, delta * 2);
     const newScore = state.score + (newSpeed * delta * 0.2);
-    let newCombo = state.combo;
-    if (Date.now() - state.lastComboTime > 3000 && state.combo > 1) newCombo = 1;
-    let newEnemies = state.enemies.map(e => ({ ...e, z: e.z + (newSpeed * delta * 0.5), passed: e.passed || false })).filter(e => e.z < 100); 
-    const spawnRate = 0.02 + (newSpeed / 10000); 
-    if (Math.random() < spawnRate && newEnemies.length < 7) {
+
+    // --- TRAFİK YAPAY ZEKASI (AI) ---
+    let newEnemies = state.enemies.map(enemy => {
+      // 1. BAĞIL HIZ HESABI
+      // Eğer biz hızlıysak düşman bize yaklaşır (z artar).
+      // Eğer düşman bizden hızlıysa bizden uzaklaşır (z azalır).
+      // enemy.speed (km/h) -> oyun birimine çeviriyoruz (* 0.5)
+      const relativeSpeed = (newSpeed - enemy.ownSpeed) * delta * 0.5;
+      let newZ = enemy.z + relativeSpeed;
+      let newX = enemy.x;
+      let newLane = enemy.lane;
+      let isChanging = enemy.isChanging;
+
+      // 2. ŞERİT DEĞİŞTİRME MANTIĞI
+      if (isChanging) {
+        // Şerit değiştirme animasyonu (Smooth geçiş)
+        const targetX = (enemy.targetLane - 1) * 4.5;
+        const moveDir = targetX > enemy.x ? 1 : -1;
+        newX += moveDir * delta * 15; // Sağa/Sola kayma hızı
+
+        // Hedefe ulaştı mı?
+        if (Math.abs(newX - targetX) < 0.2) {
+          newX = targetX;
+          newLane = enemy.targetLane;
+          isChanging = false;
+        }
+      } else {
+        // Rastgele şerit değiştirme kararı (%0.5 şans)
+        if (Math.random() < 0.005) {
+          const direction = Math.random() > 0.5 ? 1 : -1;
+          const targetLane = newLane + direction;
+
+          // Güvenlik Kontrolü: Yolun dışına çıkma ve Çarpışma var mı?
+          if (targetLane >= 0 && targetLane <= 2) {
+            // Hedef şeritte yakın araç var mı? (AI Güvenliği)
+            const isSafe = !state.enemies.some(other => 
+              other.id !== enemy.id && 
+              (other.lane === targetLane || other.targetLane === targetLane) && 
+              Math.abs(other.z - newZ) < 15 // 15 birim güvenli mesafe
+            );
+
+            if (isSafe) {
+              isChanging = true;
+              enemy.targetLane = targetLane;
+            }
+          }
+        }
+      }
+
+      return { ...enemy, z: newZ, x: newX, lane: newLane, isChanging, targetLane: enemy.targetLane };
+    })
+    .filter(e => e.z < 50 && e.z > -600); // Çok uzaklaşan veya arkada kalanları sil
+
+    // YENİ ARAÇ OLUŞTURMA (SPAWN)
+    // Araçlar artık çok uzakta (-400) değil, görüş mesafesinin hemen ucunda belirsin (-250)
+    const spawnRate = 0.03 + (newSpeed / 15000); 
+    if (Math.random() < spawnRate && newEnemies.length < 10) {
       const randomLane = Math.floor(Math.random() * 3); 
-      const r = Math.random();
-      let type = 'sedan';
-      if (r > 0.7) type = 'truck';
-      newEnemies.push({ id: Math.random(), lane: randomLane, z: -400 - Math.random() * 200, passed: false, type });
+      
+      // Çarpışma önleyici Spawn (Aynı yere araç koyma)
+      const isLaneFree = !newEnemies.some(e => e.lane === randomLane && e.z < -200);
+
+      if (isLaneFree) {
+        const r = Math.random();
+        let type = 'sedan';
+        let ownSpeed = 80; // Varsayılan hız
+
+        if (r > 0.7) { type = 'truck'; ownSpeed = 65; } // Kamyonlar yavaş (65 km/h)
+        else if (r > 0.9) { type = 'bus'; ownSpeed = 70; } // Otobüsler orta (70 km/h)
+        else { ownSpeed = 90 + Math.random() * 30; } // Arabalar hızlı (90-120 km/h)
+
+        newEnemies.push({ 
+          id: Math.random(), 
+          lane: randomLane, 
+          targetLane: randomLane,
+          x: (randomLane - 1) * 4.5, // Başlangıç X konumu
+          z: -250, 
+          passed: false, 
+          type, 
+          ownSpeed,
+          isChanging: false
+        });
+      }
     }
+
     return { speed: newSpeed, score: newScore, enemies: newEnemies, combo: newCombo };
   }),
+
   setGameOver: () => set({ gameOver: true, speed: 0, targetSpeed: 0 })
 }));
 
-// --- 2. YENİ HIZ GÖSTERGESİ BİLEŞENİ ---
+// --- 2. HIZ GÖSTERGESİ ---
 function Speedometer({ speed }) {
-  // Hızı açıya dönüştür. 0 km/h -> -135 derece, 360 km/h -> +135 derece
-  // Gösterge 270 derecelik bir yay çiziyor.
   const maxSpeed = 360;
   const angle = -135 + (speed / maxSpeed) * 270;
-
-  const containerStyle = {
-    position: 'relative',
-    width: '200px',
-    height: '200px',
-    background: 'radial-gradient(circle at center, #1a1a2e 0%, #0f0f1a 70%)',
-    borderRadius: '50%',
-    border: '5px solid #2e2e4e',
-    boxShadow: '0 0 20px rgba(0, 255, 255, 0.2), inset 0 0 10px rgba(0,0,0,0.5)',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    color: '#fff',
-    fontFamily: 'Arial, sans-serif',
-  };
-
-  // Kadran çizgileri ve sayıları için yardımcı fonksiyon
   const renderMarks = () => {
     const marks = [];
     for (let i = 0; i <= maxSpeed; i += 30) {
       const markAngle = -135 + (i / maxSpeed) * 270;
       const isMajor = i % 60 === 0;
-      const length = isMajor ? '15px' : '10px';
-      const width = isMajor ? '3px' : '2px';
-      const color = i >= 240 ? '#ff3333' : '#00ff00'; // 240'tan sonra kırmızı
-
-      // Çizgi
       marks.push(
-        <div
-          key={`line-${i}`}
-          style={{
-            position: 'absolute',
-            bottom: '50%',
-            left: '50%',
-            width: width,
-            height: '100px',
-            transformOrigin: 'bottom center',
-            transform: `translateX(-50%) rotate(${markAngle}deg)`,
-          }}
-        >
-          <div style={{ width: '100%', height: length, background: color, position: 'absolute', top: 0 }}></div>
+        <div key={`line-${i}`} style={{ position: 'absolute', bottom: '50%', left: '50%', width: isMajor?'3px':'2px', height: '100px', transformOrigin: 'bottom center', transform: `translateX(-50%) rotate(${markAngle}deg)` }}>
+          <div style={{ width: '100%', height: isMajor?'15px':'10px', background: i>=240?'#ff3333':'#00ff00', position: 'absolute', top: 0 }}></div>
         </div>
       );
-
-      // Sayı (Sadece ana çizgiler için)
       if (isMajor) {
-        // Sayının konumunu hesaplamak için biraz trigonometri
-        const radius = 70; // Merkeze olan uzaklık
-        const rad = (markAngle - 90) * (Math.PI / 180); // Açıyı radyana çevir ve düzelt
-        const x = Math.cos(rad) * radius;
-        const y = Math.sin(rad) * radius;
-
-        marks.push(
-          <div
-            key={`num-${i}`}
-            style={{
-              position: 'absolute',
-              top: `calc(50% + ${y}px)`,
-              left: `calc(50% + ${x}px)`,
-              transform: 'translate(-50%, -50%)',
-              fontSize: '14px',
-              fontWeight: 'bold',
-              color: color,
-              textShadow: `0 0 5px ${color}`,
-            }}
-          >
-            {i}
-          </div>
-        );
+        const rad = (markAngle - 90) * (Math.PI / 180);
+        marks.push(<div key={`num-${i}`} style={{ position: 'absolute', top: `calc(50% + ${Math.sin(rad)*70}px)`, left: `calc(50% + ${Math.cos(rad)*70}px)`, transform: 'translate(-50%, -50%)', fontSize: '14px', fontWeight: 'bold', color: i>=240?'#ff3333':'#00ff00' }}>{i}</div>);
       }
     }
     return marks;
   };
-
   return (
-    <div style={containerStyle}>
-      {/* Kadran Çizgileri ve Sayıları */}
+    <div style={{ position: 'relative', width: '200px', height: '200px', background: 'radial-gradient(circle at center, #1a1a2e 0%, #0f0f1a 70%)', borderRadius: '50%', border: '5px solid #2e2e4e', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#fff', fontFamily: 'Arial' }}>
       {renderMarks()}
-
-      {/* Dijital Hız Değeri */}
-      <div style={{ position: 'absolute', top: '65%', textAlign: 'center' }}>
-        <div style={{ fontSize: '32px', fontWeight: 'bold', textShadow: '0 0 10px #00ff00' }}>
-          {Math.floor(speed)}
-        </div>
-        <div style={{ fontSize: '12px', color: '#aaa' }}>km/h</div>
-      </div>
-
-      {/* İbre (Needle) */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: '50%',
-          left: '50%',
-          width: '6px',
-          height: '85px',
-          background: 'linear-gradient(to top, #ff3333, #ff6666)',
-          transformOrigin: 'bottom center',
-          transform: `translateX(-50%) rotate(${angle}deg)`,
-          borderRadius: '50% 50% 0 0',
-          boxShadow: '0 0 10px rgba(255, 50, 50, 0.5)',
-          zIndex: 2,
-        }}
-      ></div>
-      {/* İbrenin Merkezi */}
-      <div
-        style={{
-          position: 'absolute',
-          width: '20px',
-          height: '20px',
-          background: '#333',
-          borderRadius: '50%',
-          border: '3px solid #ff3333',
-          zIndex: 3,
-        }}
-      ></div>
+      <div style={{ position: 'absolute', top: '65%', textAlign: 'center' }}><div style={{ fontSize: '32px', fontWeight: 'bold', textShadow: '0 0 10px #00ff00' }}>{Math.floor(speed)}</div><div style={{ fontSize: '12px', color: '#aaa' }}>km/h</div></div>
+      <div style={{ position: 'absolute', bottom: '50%', left: '50%', width: '6px', height: '85px', background: 'linear-gradient(to top, #ff3333, #ff6666)', transformOrigin: 'bottom center', transform: `translateX(-50%) rotate(${angle}deg)`, borderRadius: '50% 50% 0 0', zIndex: 2 }}></div>
+      <div style={{ position: 'absolute', width: '20px', height: '20px', background: '#333', borderRadius: '50%', border: '3px solid #ff3333', zIndex: 3 }}></div>
     </div>
   );
 }
-
 
 // --- 3. OYUNCU ARABASI ---
 function PlayerCar() {
@@ -194,9 +172,10 @@ function PlayerCar() {
     group.current.rotation.x = -speed * 0.0002; 
     wheels.current.forEach(w => { if(w) w.rotation.x += speed * delta * 0.1; });
 
+    // Çarpışma Kontrolü
     enemies.forEach(enemy => {
-      const enemyX = (enemy.lane - 1) * 4.5;
-      const dx = Math.abs(group.current.position.x - enemyX);
+      // enemy.x artık dinamik değişiyor, şerit değil x pozisyonuna bakıyoruz
+      const dx = Math.abs(group.current.position.x - enemy.x);
       const dz = Math.abs(enemy.z - (-2)); 
       if (dz < 3.8 && dx < 2.0) setGameOver();
       if (!enemy.passed && dz < 7.0 && dx > 2.2 && dx < 5.0) {
@@ -214,7 +193,6 @@ function PlayerCar() {
     <group ref={group} position={[0, 0, -2]}>
       <primitive object={leftTarget.current} />
       <primitive object={rightTarget.current} />
-
       <spotLight position={[0.8, 0.6, -1.5]} target={rightTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} castShadow />
       <spotLight position={[-0.8, 0.6, -1.5]} target={leftTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} castShadow />
       <pointLight position={[0, 3, 0]} intensity={2} distance={15} />
@@ -241,7 +219,7 @@ function PlayerCar() {
   );
 }
 
-// --- 4. TRAFİK ---
+// --- 4. TRAFİK (GELİŞMİŞ GÖRÜNÜM) ---
 function Traffic() {
   const enemies = useGameStore(state => state.enemies);
   const truckMat = new THREE.MeshStandardMaterial({ color: '#335577', roughness: 0.5 }); 
@@ -253,9 +231,14 @@ function Traffic() {
   return (
     <>
       {enemies.map(enemy => {
-        const x = (enemy.lane - 1) * 4.5;
+        // Artık enemy.x'i kullanıyoruz, çünkü şerit değiştiriyorlar
+        const x = enemy.x; 
+        
+        // Şerit değiştirenler hafif yatsın (Dönüş efekti)
+        const tilt = enemy.isChanging ? (enemy.targetLane > enemy.lane ? -0.1 : 0.1) : 0;
+
         return (
-          <group key={enemy.id} position={[x, 0, enemy.z]}>
+          <group key={enemy.id} position={[x, 0, enemy.z]} rotation={[0, 0, tilt]}>
             {enemy.type === 'truck' && (
                <group>
                  <mesh position={[0, 2.0, 0]} material={containerMat} castShadow><boxGeometry args={[2.6, 3.2, 7.5]} /></mesh>
@@ -286,7 +269,7 @@ function Traffic() {
   );
 }
 
-// --- 5. ÇEVRE ---
+// --- 5. ÇEVRE (BİNALAR VE AĞAÇLAR) ---
 const Building = ({ width, height, side, type }) => {
     const isApartment = type === 'apartment';
     const buildingMat = new THREE.MeshStandardMaterial({ color: '#666', roughness: 0.9 });
@@ -430,7 +413,6 @@ function RoadEnvironment() {
       <SideObjects side={1} />
       <SideObjects side={-1} />
       
-      {/* ZEMİN (YEŞİL ÇİM) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]}>
           <planeGeometry args={[2000, 2000]} />
           <meshStandardMaterial color="#2e8b57" roughness={1.0} metalness={0.0} />
@@ -463,22 +445,17 @@ function SpeedLines() {
   );
 }
 
-// --- GÖKYÜZÜ BİLEŞENİ ---
+// --- GÖKYÜZÜ ---
 function SkyBackground() {
   const { scene } = useThree();
   const skyTexture = useTexture('https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80');
-
   useEffect(() => {
     scene.background = skyTexture;
-    return () => {
-      scene.background = null;
-    };
+    return () => { scene.background = null; };
   }, [scene, skyTexture]);
-
   return null;
 }
 
-// --- 7. ANA UYGULAMA ---
 export default function App() {
   const { speed, score, combo, message, gameOver, startGame, accelerate, decelerate, changeLane } = useGameStore();
   useEffect(() => {
@@ -500,12 +477,10 @@ export default function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#080808', overflow: 'hidden' }}>
       
-      {/* --- YENİ HIZ GÖSTERGESİ --- */}
       <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 10, pointerEvents: 'none' }}>
         <Speedometer speed={speed} />
       </div>
 
-      {/* SKOR VE COMBO (Hız göstergesinin altına alındı) */}
       <div style={{ position: 'absolute', top: 230, left: 20, color: '#fff', zIndex: 10, fontFamily: 'Arial', pointerEvents: 'none' }}>
         <div style={{ fontSize: '24px', color: '#ddd' }}>SKOR: {Math.floor(score)}</div>
         {combo > 1 && <div style={{ fontSize: '40px', color: '#00ff00', fontWeight: 'bold', marginTop: '10px', textShadow: '0 0 15px lime' }}>{combo}x COMBO</div>}
@@ -522,10 +497,8 @@ export default function App() {
 
       <Canvas shadows>
         <PerspectiveCamera makeDefault position={[0, 6, 14]} fov={55} />
-        
         <ambientLight intensity={0.8} color="#ffffff" /> 
         <hemisphereLight skyColor="#445566" groundColor="#223344" intensity={0.6} />
-
         <Suspense fallback={null}>
            <SkyBackground />
            <SpeedLines />
