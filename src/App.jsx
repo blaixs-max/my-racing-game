@@ -4,133 +4,46 @@ import { PerspectiveCamera, Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import { create } from 'zustand';
 
-// --- 1. OYUN VERİ MERKEZİ (AKILLI TRAFİK AI) ---
+// --- 1. OYUN AYARLARI ---
 const useGameStore = create((set, get) => ({
   speed: 0,
   targetSpeed: 20,
   lane: 1, 
   score: 0,
   combo: 1,
+  lastComboTime: 0,
   gameOver: false,
   enemies: [],
   message: "", 
-  
   startGame: () => set({ speed: 20, targetSpeed: 90, score: 0, combo: 1, gameOver: false, enemies: [], message: "", lane: 1 }),
-  
   changeLane: (direction) => set((state) => {
     if (state.gameOver) return {};
     return { lane: Math.max(0, Math.min(2, state.lane + direction)) };
   }),
-  
   accelerate: () => set((state) => !state.gameOver && { targetSpeed: 380 }),
   decelerate: () => set((state) => !state.gameOver && { targetSpeed: 90 }),
-  
   triggerNearMiss: () => {
     const { combo, score } = get();
-    set({ combo: Math.min(combo + 1, 10), score: score + (500 * combo), message: `MAKAS! ${combo}x` });
+    set({ combo: Math.min(combo + 1, 10), score: score + (500 * combo), message: `MAKAS! ${combo}x`, lastComboTime: Date.now() });
     setTimeout(() => set({ message: "" }), 1000);
   },
-
   updateGame: (delta) => set((state) => {
     if (state.gameOver) return { speed: 0, targetSpeed: 0 };
-
     const newSpeed = THREE.MathUtils.lerp(state.speed, state.targetSpeed, delta * 3);
     const newScore = state.score + (newSpeed * delta * 0.2);
-
-    // --- GELİŞMİŞ TRAFİK AI ---
-    let newEnemies = state.enemies.map(enemy => {
-      // 1. İleri Hareket (Bağıl Hız)
-      // enemy.ownSpeed (km/h) -> oyun birimine çeviriyoruz (* 0.5)
-      const relativeSpeed = (newSpeed - enemy.ownSpeed) * delta * 0.5;
-      let newZ = enemy.z + relativeSpeed;
-      let newX = enemy.x;
-      let newLane = enemy.lane;
-      let isChanging = enemy.isChanging;
-      let targetLane = enemy.targetLane;
-
-      // 2. Şerit Değiştirme Animasyonu
-      if (isChanging) {
-        const destX = (targetLane - 1) * 4.5;
-        const moveDir = destX > newX ? 1 : -1;
-        // Yumuşak geçiş hızı (10 birim/sn)
-        newX += moveDir * delta * 10; 
-
-        // Hedefe ulaştı mı? (0.2 birim hassasiyet)
-        if (Math.abs(newX - destX) < 0.2) {
-          newX = destX;
-          newLane = targetLane;
-          isChanging = false;
-        }
-      } 
-      // 3. Şerit Değiştirme Kararı (AI)
-      else {
-        // Her karede %2 şansla şerit değiştirmeyi dene
-        if (Math.random() < 0.02) {
-          const direction = Math.random() > 0.5 ? 1 : -1;
-          const proposedLane = newLane + direction;
-
-          // Yol sınırları içinde mi?
-          if (proposedLane >= 0 && proposedLane <= 2) {
-            // GÜVENLİK KONTROLÜ: Hedef şeritte çarpışma var mı?
-            // Kendisi hariç, hedef şeritteki araçlara bak
-            const isSafe = !state.enemies.some(other => 
-              other.id !== enemy.id && 
-              (other.lane === proposedLane || other.targetLane === proposedLane) && // Hedef şerittekiler
-              Math.abs(other.z - newZ) < 30 // 30 metre önü ve arkası boş mu?
-            );
-
-            if (isSafe) {
-              isChanging = true;
-              targetLane = proposedLane;
-            }
-          }
-        }
-      }
-
-      return { 
-        ...enemy, 
-        z: newZ, 
-        x: newX, 
-        lane: newLane, 
-        targetLane, 
-        isChanging 
-      };
-    }).filter(e => e.z < 100 && e.z > -600); // Çok uzaklaşanları temizle
-
-    // YENİ ARAÇ OLUŞTURMA (Spawn Logic)
-    const spawnRate = 0.03 + (newSpeed / 15000); 
-    if (Math.random() < spawnRate && newEnemies.length < 8) {
+    let newCombo = state.combo;
+    if (Date.now() - state.lastComboTime > 3000 && state.combo > 1) newCombo = 1;
+    let newEnemies = state.enemies.map(e => ({ ...e, z: e.z + (newSpeed * delta * 0.5), passed: e.passed || false })).filter(e => e.z < 100); 
+    const spawnRate = 0.02 + (newSpeed / 10000); 
+    if (Math.random() < spawnRate && newEnemies.length < 7) {
       const randomLane = Math.floor(Math.random() * 3); 
-      
-      // Doğacağı yerde başka araç var mı? (Spawn Güvenliği)
-      const isLaneFree = !newEnemies.some(e => e.lane === randomLane && e.z < -350);
-
-      if (isLaneFree) {
-        const r = Math.random();
-        let type = 'sedan';
-        let ownSpeed = 90; // Varsayılan hız
-
-        if (r > 0.7) { type = 'truck'; ownSpeed = 70; } // Kamyonlar yavaş
-        else if (r > 0.9) { type = 'bus'; ownSpeed = 75; } // Otobüsler orta
-        else { ownSpeed = 100 + Math.random() * 40; } // Sedanlar hızlı (100-140 arası)
-
-        newEnemies.push({ 
-          id: Math.random(), 
-          lane: randomLane, 
-          targetLane: randomLane, // Hedef şerit başlangıçta aynı
-          x: (randomLane - 1) * 4.5, 
-          z: -400 - Math.random() * 100, 
-          passed: false, 
-          type,
-          ownSpeed, // Her aracın kendi hızı var
-          isChanging: false
-        });
-      }
+      const r = Math.random();
+      let type = 'sedan';
+      if (r > 0.7) type = 'truck';
+      newEnemies.push({ id: Math.random(), lane: randomLane, z: -400 - Math.random() * 200, passed: false, type });
     }
-
     return { speed: newSpeed, score: newScore, enemies: newEnemies, combo: newCombo };
   }),
-
   setGameOver: () => set({ gameOver: true, speed: 0, targetSpeed: 0 })
 }));
 
@@ -186,14 +99,12 @@ function PlayerCar() {
     group.current.rotation.x = -speed * 0.0002; 
     wheels.current.forEach(w => { if(w) w.rotation.x += speed * delta * 0.1; });
 
-    // ÇARPIŞMA MANTIĞI (GÜNCELLENDİ)
-    // Artık düşmanın dinamik X pozisyonunu (enemy.x) kullanıyoruz
     enemies.forEach(enemy => {
-      const dx = Math.abs(group.current.position.x - enemy.x); // Düşmanın anlık yatay konumu
+      const enemyX = (enemy.lane - 1) * 4.5;
+      const dx = Math.abs(group.current.position.x - enemyX);
       const dz = Math.abs(enemy.z - (-2)); 
-      
-      if (dz < 3.8 && dx < 2.0) setGameOver(); // Kaza
-      if (!enemy.passed && dz < 7.0 && dx > 2.5 && dx < 5.0) {
+      if (dz < 3.8 && dx < 2.0) setGameOver();
+      if (!enemy.passed && dz < 7.0 && dx > 2.2 && dx < 5.0) {
         enemy.passed = true; 
         triggerNearMiss();   
       }
@@ -208,6 +119,7 @@ function PlayerCar() {
     <group ref={group} position={[0, 0, -2]}>
       <primitive object={leftTarget.current} />
       <primitive object={rightTarget.current} />
+
       <spotLight position={[0.8, 0.6, -1.5]} target={rightTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} castShadow />
       <spotLight position={[-0.8, 0.6, -1.5]} target={leftTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} castShadow />
       <pointLight position={[0, 3, 0]} intensity={2} distance={15} />
@@ -234,7 +146,7 @@ function PlayerCar() {
   );
 }
 
-// --- 4. TRAFİK (HAREKETLİ) ---
+// --- 4. TRAFİK ---
 function Traffic() {
   const enemies = useGameStore(state => state.enemies);
   const truckMat = new THREE.MeshStandardMaterial({ color: '#335577', roughness: 0.5 }); 
@@ -246,17 +158,9 @@ function Traffic() {
   return (
     <>
       {enemies.map(enemy => {
-        // Düşman pozisyonunu AI'dan alıyoruz
-        const x = enemy.x; 
-        
-        // Şerit değiştirirken hafif yatsın
-        let tilt = 0;
-        if (enemy.isChanging) {
-            tilt = (enemy.targetLane > enemy.lane) ? -0.1 : 0.1;
-        }
-
+        const x = (enemy.lane - 1) * 4.5;
         return (
-          <group key={enemy.id} position={[x, 0, enemy.z]} rotation={[0, 0, tilt]}>
+          <group key={enemy.id} position={[x, 0, enemy.z]}>
             {enemy.type === 'truck' && (
                <group>
                  <mesh position={[0, 2.0, 0]} material={containerMat} castShadow><boxGeometry args={[2.6, 3.2, 7.5]} /></mesh>
@@ -431,6 +335,7 @@ function RoadEnvironment() {
       <SideObjects side={1} />
       <SideObjects side={-1} />
       
+      {/* ZEMİN (YEŞİL ÇİM) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]}>
           <planeGeometry args={[2000, 2000]} />
           <meshStandardMaterial color="#2e8b57" roughness={1.0} metalness={0.0} />
@@ -463,11 +368,13 @@ function SpeedLines() {
   );
 }
 
-// --- AY VE YILDIZLAR ---
+// --- GÖKYÜZÜ (PROCEDURAL - HATA VERMEZ) ---
 function SkyEnvironment() {
   return (
     <group>
+      {/* Yıldızlar */}
       <Stars radius={150} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
+      {/* Ay */}
       <mesh position={[50, 80, -200]}>
         <sphereGeometry args={[10, 32, 32]} />
         <meshBasicMaterial color="#ffffff" />
@@ -518,10 +425,8 @@ export default function App() {
 
       <Canvas shadows>
         <PerspectiveCamera makeDefault position={[0, 6, 14]} fov={55} />
-        
         <ambientLight intensity={0.6} color="#ffffff" /> 
         <hemisphereLight skyColor="#445566" groundColor="#223344" intensity={0.6} />
-
         <Suspense fallback={null}>
            <SkyEnvironment />
            <SpeedLines />
