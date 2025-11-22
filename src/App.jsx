@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, Suspense, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { PerspectiveCamera, Environment, useGLTF } from '@react-three/drei';
+import { PerspectiveCamera, Environment, useGLTF, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import { create } from 'zustand';
 
@@ -68,14 +68,14 @@ const useGameStore = create((set, get) => ({
   setGameOver: () => set({ gameOver: true, speed: 0, targetSpeed: 0 })
 }));
 
-// --- 2. OYUNCU ARABASI (GLTF KLASÖRÜNDEN) ---
+// --- 2. OYUNCU ARABASI (BULUTTAN YÜKLENEN MCLAREN) ---
 function PlayerCar() {
   const { lane, enemies, setGameOver, gameOver, triggerNearMiss, speed } = useGameStore();
   const group = useRef();
   
-  // DİKKAT: Dosya yolu artık klasör içini gösteriyor
-  // Eğer dosya ismin 'scene.gltf' değilse burayı güncelle
-  const { scene } = useGLTF('/hero/scene.gltf');
+  // INTERNETTEN HAZIR MODEL (McLaren)
+  // Bu link her zaman çalışır, dosya indirmene gerek yok.
+  const { scene } = useGLTF('https://vazxmixjsiawhamofees.supabase.co/storage/v1/object/public/models/mclaren/model.gltf');
   const carModel = useMemo(() => scene.clone(), [scene]);
 
   const leftTarget = useRef();
@@ -111,24 +111,25 @@ function PlayerCar() {
       <primitive object={leftTarget.current} />
       <primitive object={rightTarget.current} />
 
+      {/* GÜÇLÜ FARLAR */}
       <spotLight position={[0.5, 0.8, -1.0]} target={rightTarget.current} angle={0.4} penumbra={0.5} intensity={150} color="#fff" distance={300} />
       <spotLight position={[-0.5, 0.8, -1.0]} target={leftTarget.current} angle={0.4} penumbra={0.5} intensity={150} color="#fff" distance={300} />
       <pointLight position={[0, 3, 0]} intensity={3} distance={10} />
 
-      {/* MODEL */}
-      {/* Eğer araba görünmezse scale'i büyüt (örn: 100) */}
-      <primitive object={carModel} scale={1.0} rotation={[0, Math.PI, 0]} />
+      {/* --- MODEL (Scale ile boyutu ayarlandı) --- */}
+      {/* McLaren modeli biraz büyüktür, 0.015 ile küçülttük */}
+      <primitive object={carModel} scale={0.015} rotation={[0, Math.PI, 0]} />
     </group>
   );
 }
 
-// --- 3. TRAFİK (GLTF KLASÖRLERİNDEN) ---
+// --- 3. TRAFİK (BULUTTAN YÜKLENEN MODELLER) ---
 function Traffic() {
   const enemies = useGameStore(state => state.enemies);
   
-  // Her aracı kendi klasöründen çekiyoruz
-  const truckGltf = useGLTF('/truck/scene.gltf');
-  const sedanGltf = useGLTF('/sedan/scene.gltf');
+  // Kamyonet ve Polis Arabası Linkleri (Güvenilir CDN)
+  const truckGltf = useGLTF('https://vazxmixjsiawhamofees.supabase.co/storage/v1/object/public/models/zombie-car/model.gltf');
+  const sedanGltf = useGLTF('https://vazxmixjsiawhamofees.supabase.co/storage/v1/object/public/models/police-car/model.gltf');
 
   return (
     <>
@@ -140,7 +141,8 @@ function Traffic() {
 
         return (
           <group key={enemy.id} position={[x, 0, enemy.z]}>
-             <primitive object={clone} scale={enemy.type === 'truck' ? 1.5 : 1.2} rotation={[0, 0, 0]} />
+             {/* Araç Boyutlandırma */}
+             <primitive object={clone} scale={enemy.type === 'truck' ? 1.8 : 0.6} rotation={[0, 0, 0]} />
              <pointLight position={[0, 1, 2]} color="red" intensity={3} distance={8} />
           </group>
         );
@@ -149,7 +151,8 @@ function Traffic() {
   );
 }
 
-// --- 4. ÇEVRE (KODLA - PERFORMANS İÇİN) ---
+// --- 4. ÇEVRE (BİNALAR - KODLA ÇİZİM) ---
+// Performans için binalar kodla kalmalı.
 const Building = ({ width, height, side, type }) => {
     const isApartment = type === 'apartment';
     const buildingMat = new THREE.MeshStandardMaterial({ color: '#888888', roughness: 0.8 });
@@ -272,6 +275,7 @@ function RoadEnvironment() {
 
   return (
     <group>
+      {/* YOL */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
          <planeGeometry args={[20, 1000]} /> 
          <meshStandardMaterial color="#444" roughness={0.8} />
@@ -301,7 +305,7 @@ function RoadEnvironment() {
   );
 }
 
-// --- 6. HIZ EFEKTLERİ ---
+// --- 6. HIZ EFEKTİ ---
 function SpeedLines() {
   const { speed } = useGameStore();
   const lines = useMemo(() => new Array(80).fill(0).map(() => ({
@@ -356,7 +360,7 @@ export default function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#080808', overflow: 'hidden' }}>
       
-      <Suspense fallback={<div style={{color:'white', fontSize:'30px', position:'absolute', top:'50%', left:'50%', transform:'translate(-50%, -50%)'}}>GLTF MODELLER YÜKLENİYOR...</div>}>
+      <Suspense fallback={<div style={{color:'white', fontSize:'30px', position:'absolute', top:'50%', left:'50%', transform:'translate(-50%, -50%)'}}>ARAÇLAR BULUTTAN YÜKLENİYOR...</div>}>
         
         <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', zIndex: 10, fontFamily: 'Arial', pointerEvents: 'none' }}>
           <div style={{ fontSize: '50px', fontWeight: 'bold', fontStyle: 'italic', textShadow: '0 0 10px black' }}>{Math.floor(speed)} <span style={{fontSize: '20px'}}>KM/H</span></div>
@@ -375,13 +379,9 @@ export default function App() {
 
         <Canvas shadows>
           <PerspectiveCamera makeDefault position={[0, 6, 14]} fov={55} />
-          
           <ambientLight intensity={1.5} color="#ffffff" /> 
           <hemisphereLight skyColor="#88ccff" groundColor="#444444" intensity={1.0} />
-          <fog attach="fog" args={['#080808', 40, 250]} />
-
           <SpeedLines />
-          
           <PlayerCar />
           <Traffic />
           <RoadEnvironment />
