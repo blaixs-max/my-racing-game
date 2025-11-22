@@ -318,9 +318,11 @@ function RoadEnvironment() {
       <SideObjects side={1} />
       <SideObjects side={-1} />
       
+      {/* ZEMİN (ÇİM) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]}>
           <planeGeometry args={[2000, 2000]} />
-          <meshStandardMaterial color="#050505" />
+          {/* Koyu yeşil çim rengi ve mat doku */}
+          <meshStandardMaterial color="#2e8b57" roughness={1.0} metalness={0.0} />
       </mesh>
     </group>
   );
