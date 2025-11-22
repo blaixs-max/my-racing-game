@@ -6,30 +6,34 @@ import { create } from 'zustand';
 
 // --- 1. OYUN VERİ MERKEZİ ---
 const useGameStore = create((set, get) => ({
-  gameState: 'countdown', // 'countdown', 'playing', 'gameover'
+  gameState: 'menu', // Başlangıçta 'menu' modunda bekler
   countdown: 5,
   speed: 0,
   targetSpeed: 20,
   lane: 1, 
   score: 0,
   combo: 1,
+  lastComboTime: 0,
+  gameOver: false,
   enemies: [],
-  coins: [], // Altınlar
+  coins: [],
   message: "", 
   
+  // Oyunu Başlatma Fonksiyonu
   startGame: () => {
-    // Reset ve Countdown başlat
+    // Önce durumu sıfırla
     set({ 
-      gameState: 'countdown', 
+      gameState: 'countdown', // Geri sayım moduna geç
       countdown: 5, 
       speed: 0, 
-      targetSpeed: 0, // Countdown sırasında hareket yok
+      targetSpeed: 0, 
       score: 0, 
       combo: 1, 
       enemies: [], 
       coins: [],
       message: "", 
-      lane: 1 
+      lane: 1,
+      gameOver: false
     });
 
     // Geri sayım sayacı
@@ -39,9 +43,10 @@ const useGameStore = create((set, get) => ({
       if (count > 0) {
         set({ countdown: count });
       } else if (count === 0) {
-        set({ countdown: "RACE!" });
+        set({ countdown: "GO!" });
       } else {
         clearInterval(timer);
+        // Yarışı başlat
         set({ gameState: 'playing', countdown: null, speed: 20, targetSpeed: 90 });
       }
     }, 1000);
@@ -56,7 +61,7 @@ const useGameStore = create((set, get) => ({
   decelerate: () => set((state) => state.gameState === 'playing' && { targetSpeed: 90 }),
   
   collectCoin: (id) => set((state) => ({
-    score: state.score + 100, // Altın değeri
+    score: state.score + 100,
     coins: state.coins.filter(c => c.id !== id),
     message: "+100 GOLD"
   })),
@@ -73,37 +78,28 @@ const useGameStore = create((set, get) => ({
     const newSpeed = THREE.MathUtils.lerp(state.speed, state.targetSpeed, delta * 3);
     const newScore = state.score + (newSpeed * delta * 0.2);
 
-    // --- HAREKETLER ---
-    
-    // 1. Düşman Hareketi
+    // Düşman Hareketi
     let newEnemies = state.enemies.map(e => ({
       ...e,
       z: e.z + (newSpeed - e.ownSpeed * 0.5) * delta * 0.5,
       x: e.isChanging ? e.x + (e.targetLane > e.lane ? 1 : -1) * delta * 5 : e.x
     })).filter(e => e.z < 50);
 
-    // 2. Altın Hareketi
+    // Altın Hareketi
     let newCoins = state.coins.map(c => ({
       ...c,
       z: c.z + newSpeed * delta * 0.5
     })).filter(c => c.z < 50);
 
-    // --- SPAWN MANTIĞI (Zorluk & Oynanabilirlik) ---
-    
-    // Skor arttıkça spawn oranı artar ama bir tavanı vardır
+    // Spawn Mantığı
     const difficultyMultiplier = Math.min(state.score / 50000, 0.08); 
     const spawnRate = 0.02 + difficultyMultiplier; 
 
-    if (Math.random() < spawnRate && newEnemies.length < 12) {
+    if (Math.random() < spawnRate && newEnemies.length < 10) {
       const randomLane = Math.floor(Math.random() * 3);
-      
-      // GÜVENLİK: 3 şerit de dolu mu? Eğer doluysa spawn yapma.
-      // O anki en uzak Z noktasına bakıyoruz.
       const obstaclesInZone = newEnemies.filter(e => e.z < -300 && e.z > -450).length;
       
-      // Eğer o bölgede zaten 2 araç varsa, 3.yü koyma ki geçiş yolu kalsın.
       if (obstaclesInZone < 2) {
-         // Çakışma kontrolü (Hem araba hem coin)
          const isSafeCar = !newEnemies.some(e => e.lane === randomLane && Math.abs(e.z - -400) < 40);
          const isSafeCoin = !newCoins.some(c => c.lane === randomLane && Math.abs(c.z - -400) < 40);
 
@@ -120,25 +116,22 @@ const useGameStore = create((set, get) => ({
               z: -400 - Math.random() * 100, 
               type, 
               ownSpeed: 80 + Math.random() * 40,
-              passed: false 
+              passed: false,
+              isChanging: false,
+              targetLane: randomLane
             });
          }
       }
     }
 
-    // ALTIN SPAWN (Daha seyrek)
+    // Altın Spawn
     if (Math.random() < 0.02 && newCoins.length < 5) {
         const coinLane = Math.floor(Math.random() * 3);
         const isSafeCar = !newEnemies.some(e => e.lane === coinLane && Math.abs(e.z - -400) < 40);
         const isSafeCoin = !newCoins.some(c => c.lane === coinLane && Math.abs(c.z - -400) < 40);
 
         if (isSafeCar && isSafeCoin) {
-            newCoins.push({
-                id: Math.random(),
-                lane: coinLane,
-                x: (coinLane - 1) * 4.5,
-                z: -400 - Math.random() * 50
-            });
+            newCoins.push({ id: Math.random(), lane: coinLane, x: (coinLane - 1) * 4.5, z: -400 - Math.random() * 50 });
         }
     }
 
@@ -148,7 +141,7 @@ const useGameStore = create((set, get) => ({
   setGameOver: () => set({ gameState: 'gameover', speed: 0, targetSpeed: 0 })
 }));
 
-// --- 2. GÖSTERGELER (UI) ---
+// --- 2. GÖSTERGELER (HIZ VE SKOR) ---
 function Speedometer({ speed }) {
   const maxSpeed = 360;
   const angle = -135 + (speed / maxSpeed) * 270;
@@ -184,9 +177,9 @@ function PlayerCar() {
   const { lane, enemies, coins, setGameOver, gameOver, triggerNearMiss, collectCoin, speed } = useGameStore();
   const group = useRef();
   const wheels = useRef([]);
-  
   const leftTarget = useRef();
   const rightTarget = useRef();
+
   if (!leftTarget.current) { leftTarget.current = new THREE.Object3D(); leftTarget.current.position.set(-0.5, -0.5, -100); }
   if (!rightTarget.current) { rightTarget.current = new THREE.Object3D(); rightTarget.current.position.set(0.5, -0.5, -100); }
 
@@ -195,14 +188,12 @@ function PlayerCar() {
   useFrame((state, delta) => {
     if (gameOver) return;
     
-    // HAREKET
     group.current.position.x = THREE.MathUtils.lerp(group.current.position.x, targetX, delta * 10);
     const tilt = (group.current.position.x - targetX) * 0.15;
     group.current.rotation.z = tilt; 
     group.current.rotation.x = -speed * 0.0002; 
     wheels.current.forEach(w => { if(w) w.rotation.x += speed * delta * 0.1; });
 
-    // TRAFİK ÇARPIŞMA & MAKAS
     enemies.forEach(enemy => {
       const dx = Math.abs(group.current.position.x - enemy.x);
       const dz = Math.abs(enemy.z - (-2)); 
@@ -213,13 +204,10 @@ function PlayerCar() {
       }
     });
 
-    // ALTIN TOPLAMA
     coins.forEach(coin => {
         const dx = Math.abs(group.current.position.x - coin.x);
         const dz = Math.abs(coin.z - (-2));
-        if (dz < 2.0 && dx < 1.5) {
-            collectCoin(coin.id);
-        }
+        if (dz < 2.0 && dx < 1.5) collectCoin(coin.id);
     });
   });
 
@@ -231,24 +219,15 @@ function PlayerCar() {
     <group ref={group} position={[0, 0, -2]}>
       <primitive object={leftTarget.current} />
       <primitive object={rightTarget.current} />
-
       <spotLight position={[0.8, 0.6, -1.5]} target={rightTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} castShadow />
       <spotLight position={[-0.8, 0.6, -1.5]} target={leftTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} castShadow />
       <pointLight position={[0, 3, 0]} intensity={2} distance={15} />
 
       <mesh position={[0, 0.4, 0]} material={bodyMat}><boxGeometry args={[1.8, 0.5, 4.2]} /></mesh>
-      <mesh position={[-0.95, 0.3, 1.2]} material={bodyMat}><boxGeometry args={[0.4, 0.4, 1.2]} /></mesh>
-      <mesh position={[0.95, 0.3, 1.2]} material={bodyMat}><boxGeometry args={[0.4, 0.4, 1.2]} /></mesh>
-      <mesh position={[-0.95, 0.3, -1.2]} material={bodyMat}><boxGeometry args={[0.4, 0.4, 1.2]} /></mesh>
-      <mesh position={[0.95, 0.3, -1.2]} material={bodyMat}><boxGeometry args={[0.4, 0.4, 1.2]} /></mesh>
       <mesh position={[0, 0.8, -0.3]} material={glassMat}><boxGeometry args={[1.4, 0.5, 2.0]} /></mesh>
       <mesh position={[0, 0.9, 1.9]} material={bodyMat}><boxGeometry args={[1.8, 0.1, 0.4]} /></mesh>
-      <mesh position={[-0.7, 0.6, 1.9]} material={bodyMat}><boxGeometry args={[0.1, 0.4, 0.2]} /></mesh>
-      <mesh position={[0.7, 0.6, 1.9]} material={bodyMat}><boxGeometry args={[0.1, 0.4, 0.2]} /></mesh>
       <mesh position={[0, 0.2, 0]} material={neonMat}><boxGeometry args={[1.7, 0.05, 4.1]} /></mesh>
-      <mesh position={[-0.6, 0.5, 2.11]} material={new THREE.MeshBasicMaterial({color: 'red'})}><boxGeometry args={[0.4, 0.15, 0.1]} /></mesh>
-      <mesh position={[0.6, 0.5, 2.11]} material={new THREE.MeshBasicMaterial({color: 'red'})}><boxGeometry args={[0.4, 0.15, 0.1]} /></mesh>
-
+      
       {[[-1.0, -1.2], [1.0, -1.2], [-1.0, 1.4], [1.0, 1.4]].map((pos, i) => (
          <mesh key={i} ref={el => wheels.current[i] = el} position={[pos[0], 0.35, pos[1]]} rotation={[0, 0, Math.PI/2]} material={new THREE.MeshStandardMaterial({color:'#111', roughness:0.8})}>
            <cylinderGeometry args={[0.4, 0.4, 0.4, 24]} />
@@ -258,34 +237,22 @@ function PlayerCar() {
   );
 }
 
-// --- 4. TRAFİK VE ALTINLAR ---
+// --- 4. ALTINLAR VE TRAFİK ---
 function Coins() {
     const coins = useGameStore(state => state.coins);
     const coinMat = new THREE.MeshStandardMaterial({ color: '#FFD700', metalness: 1, roughness: 0.3, emissive: '#AA8800', emissiveIntensity: 0.5 });
+    const group = useRef();
+    useFrame(() => { if(group.current) group.current.rotation.y += 0.05; });
 
     return (
         <>
             {coins.map(coin => (
-                <group key={coin.id} position={[coin.x, 1, coin.z]}>
-                    <mesh rotation={[0, 0, Math.PI / 2]} material={coinMat}>
-                        <cylinderGeometry args={[0.6, 0.6, 0.2, 16]} />
-                    </mesh>
-                    {/* Dönme Animasyonu için basit component */}
-                    <CoinAnimation />
-                </group>
+                <mesh key={coin.id} position={[coin.x, 1, coin.z]} rotation={[0, 0, Math.PI / 2]} material={coinMat}>
+                    <cylinderGeometry args={[0.6, 0.6, 0.2, 16]} />
+                </mesh>
             ))}
         </>
     )
-}
-
-function CoinAnimation() {
-    const ref = useRef();
-    useFrame(() => {
-        if(ref.current) {
-            ref.current.parent.rotation.y += 0.05;
-        }
-    });
-    return <mesh ref={ref} visible={false} />;
 }
 
 function Traffic() {
@@ -298,13 +265,11 @@ function Traffic() {
 
   return (
     <>
-      {enemies.map(enemy => {
-        const x = enemy.x; 
-        return (
-          <group key={enemy.id} position={[x, 0, enemy.z]}>
+      {enemies.map(enemy => (
+          <group key={enemy.id} position={[enemy.x, 0, enemy.z]} rotation={[0, 0, enemy.isChanging ? (enemy.targetLane > enemy.lane ? -0.1 : 0.1) : 0]}>
             {enemy.type === 'truck' && (
                <group>
-                 <mesh position={[0, 2.0, 0]} material={containerMat} castShadow><boxGeometry args={[2.6, 3.2, 7.5]} /></mesh>
+                 <mesh position={[0, 2.0, 0]} material={containerMat}><boxGeometry args={[2.6, 3.2, 7.5]} /></mesh>
                  <mesh position={[0, 1.2, -4.2]} material={truckMat}><boxGeometry args={[2.6, 2.2, 2.0]} /></mesh>
                  <mesh position={[-1, 1.0, 3.8]} material={tailLightMat}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
                  <mesh position={[1, 1.0, 3.8]} material={tailLightMat}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
@@ -312,76 +277,55 @@ function Traffic() {
             )}
             {enemy.type === 'bus' && (
                <group>
-                 <mesh position={[0, 2.0, 0]} material={busMat} castShadow><boxGeometry args={[2.7, 3.4, 10.0]} /></mesh>
+                 <mesh position={[0, 2.0, 0]} material={busMat}><boxGeometry args={[2.7, 3.4, 10.0]} /></mesh>
                  <mesh position={[-1, 1.0, 5.1]} material={tailLightMat}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
                  <mesh position={[1, 1.0, 5.1]} material={tailLightMat}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
                </group>
             )}
             {enemy.type === 'sedan' && (
                <group>
-                 <mesh position={[0, 0.7, 0]} material={sedanMat} castShadow><boxGeometry args={[2.0, 0.8, 4.2]} /></mesh>
-                 <mesh position={[0, 1.1, -0.3]} material={new THREE.MeshStandardMaterial({color:'#222'})}><boxGeometry args={[1.8, 0.5, 2.2]} /></mesh>
+                 <mesh position={[0, 0.7, 0]} material={sedanMat}><boxGeometry args={[2.0, 0.8, 4.2]} /></mesh>
                  <mesh position={[-0.8, 0.6, 2.2]} material={tailLightMat}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
                  <mesh position={[0.8, 0.6, 2.2]} material={tailLightMat}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
                </group>
             )}
           </group>
-        );
-      })}
+      ))}
     </>
   );
 }
 
 // --- 5. ÇEVRE ---
 const Building = ({ width, height, side, type }) => {
-    const isApartment = type === 'apartment';
     const buildingMat = new THREE.MeshStandardMaterial({ color: '#666', roughness: 0.9 });
     const winLitMat = new THREE.MeshStandardMaterial({ color: '#ffaa44', emissive: '#ffaa44', emissiveIntensity: 3 });
-    
     const wins = useMemo(() => {
-        if (!isApartment) return [];
+        if (type !== 'apartment') return [];
         const w = [];
         const floors = Math.floor(height / 3);
-        for (let i = 1; i < floors; i++) {
-             if (Math.random() > 0.6) w.push([0, i * 3, side * (width/2 + 0.1)]);
-        }
+        for (let i = 1; i < floors; i++) { if (Math.random() > 0.6) w.push([0, i * 3, side * (width/2 + 0.1)]); }
         return w;
-    }, [height, isApartment, side, width]);
+    }, [height, side, width, type]);
 
     return (
         <group>
-            <mesh position={[0, height / 2, 0]} material={buildingMat}>
-                <boxGeometry args={[width, height, width]} />
-            </mesh>
-            {wins.map((pos, i) => (
-                <mesh key={i} position={pos} material={winLitMat}>
-                    <planeGeometry args={[width * 0.6, 1.5]} />
-                </mesh>
-            ))}
-            {type === 'small_house' && (
-                 <mesh position={[0, height + 1, 0]} rotation={[0, Math.PI/4, 0]}>
-                    <coneGeometry args={[width*0.8, 3, 4]} />
-                    <meshStandardMaterial color="#444" />
-                 </mesh>
-            )}
+            <mesh position={[0, height / 2, 0]} material={buildingMat}><boxGeometry args={[width, height, width]} /></mesh>
+            {wins.map((pos, i) => <mesh key={i} position={pos} material={winLitMat}><planeGeometry args={[width * 0.6, 1.5]} /></mesh>)}
+            {type === 'small_house' && <mesh position={[0, height + 1, 0]} rotation={[0, Math.PI/4, 0]}><coneGeometry args={[width*0.8, 3, 4]} /><meshStandardMaterial color="#444" /></mesh>}
         </group>
     );
 };
 
 function SideObjects({ side }) {
   const { speed } = useGameStore();
-  const objects = useMemo(() => {
-    return new Array(30).fill(0).map((_, i) => {
+  const objects = useMemo(() => new Array(30).fill(0).map((_, i) => {
       const rand = Math.random();
-      let type = 'empty';
-      let height = 0;
-      let width = 0;
+      let type = 'empty', height = 0, width = 0;
       if (rand > 0.8) { type = 'apartment'; height = 30 + Math.random() * 40; width = 12; }
       else if (rand > 0.5) { type = 'small_house'; height = 6; width = 8; } 
       else if (rand > 0.2) { type = 'tree'; } 
       return { z: -i * 50, type, height, width, offset: (Math.random() - 0.5) * 20 };
-    });
-  }, []);
+  }), []);
 
   const groupRef = useRef();
   const itemsRef = useRef(objects);
@@ -412,9 +356,7 @@ function SideObjects({ side }) {
     <group ref={groupRef}>
       {objects.map((obj, i) => (
         <group key={i} position={[side * (45 + obj.offset), 0, obj.z]}>
-           {(obj.type === 'apartment' || obj.type === 'small_house') && 
-              <Building width={obj.width} height={obj.height} side={side} type={obj.type} />
-           }
+           {(obj.type === 'apartment' || obj.type === 'small_house') && <Building width={obj.width} height={obj.height} side={side} type={obj.type} />}
            <group visible={obj.type === 'tree'}>
               <mesh position={[0, 2, 0]} material={trunkMat}><cylinderGeometry args={[0.8, 1.2, 4]} /></mesh>
               <mesh position={[0, 8, 0]} material={treeMat}><coneGeometry args={[4, 10, 8]} /></mesh>
@@ -440,45 +382,27 @@ function RoadEnvironment() {
     }
   });
 
-  const Barrier = ({ x }) => (
-      <group position={[x, 0, 0]}>
-          {Array.from({length: 40}).map((_, i) => (
-             <mesh key={i} position={[0, 0.5, -i * 10]} material={new THREE.MeshStandardMaterial({color: '#999'})}>
-                <boxGeometry args={[0.2, 1.0, 0.2]} />
-             </mesh>
-          ))}
-          <mesh position={[0, 0.8, -200]} material={new THREE.MeshStandardMaterial({color: '#B0C4DE', metalness: 0.6, roughness: 0.4})}>
-              <boxGeometry args={[0.3, 0.4, 1000]} />
-          </mesh>
-      </group>
-  );
-
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
          <planeGeometry args={[20, 1000]} /> 
          <meshStandardMaterial color="#555" roughness={0.8} />
       </mesh>
-
       <group ref={stripesRef}>
-        {[-2.25, 2.25].map((x) => (
-             Array.from({ length: 30 }).map((_, j) => (
-                <mesh key={`${x}-${j}`} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.02, -j * 20]}>
-                    <planeGeometry args={[0.25, 6]} /> 
-                    <meshBasicMaterial color="#fff" />
-                </mesh>
-             ))
-        ))}
+        {[-2.25, 2.25].map((x) => Array.from({ length: 30 }).map((_, j) => (
+            <mesh key={`${x}-${j}`} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.02, -j * 20]}>
+                <planeGeometry args={[0.25, 6]} /> 
+                <meshBasicMaterial color="#fff" />
+            </mesh>
+        )))}
       </group>
-
-      <Barrier x={-10.5} />
-      <Barrier x={10.5} />
+      <mesh position={[-10.5, 0.5, 0]}><boxGeometry args={[0.5, 1, 1000]} /><meshStandardMaterial color="#999" /></mesh>
+      <mesh position={[10.5, 0.5, 0]}><boxGeometry args={[0.5, 1, 1000]} /><meshStandardMaterial color="#999" /></mesh>
       <SideObjects side={1} />
       <SideObjects side={-1} />
-      
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]}>
           <planeGeometry args={[2000, 2000]} />
-          <meshStandardMaterial color="#2e8b57" roughness={1.0} metalness={0.0} />
+          <meshStandardMaterial color="#113311" roughness={1.0} />
       </mesh>
     </group>
   );
@@ -486,9 +410,7 @@ function RoadEnvironment() {
 
 function SpeedLines() {
   const { speed } = useGameStore();
-  const lines = useMemo(() => new Array(100).fill(0).map(() => ({
-    x: (Math.random() - 0.5) * 50, y: Math.random() * 15, z: (Math.random() - 0.5) * 200, len: Math.random() * 20 + 10
-  })), []);
+  const lines = useMemo(() => new Array(100).fill(0).map(() => ({ x: (Math.random() - 0.5) * 50, y: Math.random() * 15, z: (Math.random() - 0.5) * 200, len: Math.random() * 20 + 10 })), []);
   const ref = useRef();
   useFrame((state, delta) => {
     if(ref.current) {
@@ -501,31 +423,15 @@ function SpeedLines() {
   if (speed < 100) return null;
   return (
     <group ref={ref}>
-      {lines.map((l, i) => (
-         <mesh key={i} position={[l.x, l.y, l.z]}><boxGeometry args={[0.04, 0.04, l.len]} /><meshBasicMaterial color="white" transparent opacity={0.15} /></mesh>
-      ))}
+      {lines.map((l, i) => <mesh key={i} position={[l.x, l.y, l.z]}><boxGeometry args={[0.04, 0.04, l.len]} /><meshBasicMaterial color="white" transparent opacity={0.15} /></mesh>)}
     </group>
   );
 }
 
-function SkyEnvironment() {
-  return (
-    <group>
-      <Stars radius={150} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
-      <mesh position={[50, 80, -200]}>
-        <sphereGeometry args={[10, 32, 32]} />
-        <meshBasicMaterial color="#ffffff" />
-      </mesh>
-      <pointLight position={[50, 80, -180]} intensity={1.5} color="#aabbff" distance={500} />
-    </group>
-  );
-}
-
+// --- ANA UYGULAMA ---
 export default function App() {
   const { speed, score, combo, message, gameOver, gameState, countdown, startGame, accelerate, decelerate, changeLane } = useGameStore();
-  
   useEffect(() => {
-    // İlk açılışta menü göster, startGame butona bağlanacak
     const handleKeyDown = (e) => {
       if (e.key === 'ArrowLeft') changeLane(-1);
       if (e.key === 'ArrowRight') changeLane(1);
@@ -542,62 +448,55 @@ export default function App() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a15', overflow: 'hidden' }}>
-      
-      {/* COUNTDOWN EKRANI */}
-      {gameState === 'countdown' && (
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-           <h1 style={{ fontSize: '150px', color: '#00ff00', textShadow: '0 0 20px #fff', fontStyle: 'italic' }}>{countdown}</h1>
-        </div>
+      {/* BAŞLANGIÇ MENÜSÜ (ARTIK OYUN DONMAZ) */}
+      {gameState === 'menu' && (
+         <div style={{ position: 'absolute', zIndex: 60, inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)' }}>
+            <button onClick={startGame} style={{ padding: '20px 60px', fontSize: '30px', background: '#00ff00', color:'#000', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #00ff00' }}>YARIŞA BAŞLA</button>
+         </div>
       )}
 
-      {/* BAŞLANGIÇ MENÜSÜ */}
-      {gameState === undefined && (
-         <div style={{ position: 'absolute', zIndex: 60, inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)' }}>
-            <button onClick={startGame} style={{ padding: '20px 50px', fontSize: '30px', background: '#00ff00', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }}>START RACE</button>
-         </div>
+      {/* COUNTDOWN */}
+      {gameState === 'countdown' && (
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+           <h1 style={{ fontSize: '200px', color: '#00ff00', textShadow: '0 0 50px #fff', fontStyle: 'italic' }}>{countdown}</h1>
+        </div>
       )}
 
       {/* HUD */}
       <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 10, pointerEvents: 'none' }}>
         <Speedometer speed={speed} />
       </div>
-
-      {/* YENİ SCOREBOARD TASARIMI */}
       <div style={{ 
           position: 'absolute', top: 20, right: 20, 
           background: 'linear-gradient(135deg, #333 0%, #000 100%)',
-          border: '2px solid #555',
-          borderRadius: '10px',
-          padding: '10px 20px',
-          transform: 'skewX(-15deg)',
-          zIndex: 10,
-          color: '#fff',
-          textAlign: 'right',
-          boxShadow: '0 5px 15px rgba(0,0,0,0.5)'
+          border: '2px solid #555', borderRadius: '10px', padding: '10px 30px',
+          transform: 'skewX(-15deg)', zIndex: 10, color: '#fff', textAlign: 'right', boxShadow: '0 5px 15px rgba(0,0,0,0.5)'
       }}>
         <div style={{ fontSize: '12px', color: '#00ff00', fontWeight: 'bold', transform: 'skewX(15deg)' }}>SCORE</div>
-        <div style={{ fontSize: '32px', fontWeight: 'bold', transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
+        <div style={{ fontSize: '40px', fontWeight: 'bold', transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
       </div>
 
-      {combo > 1 && <div style={{ position: 'absolute', top: 100, right: 30, fontSize: '40px', color: '#00ff00', fontWeight: 'bold', zIndex: 10, textShadow: '0 0 15px lime' }}>{combo}x COMBO</div>}
-
+      {combo > 1 && <div style={{ position: 'absolute', top: 120, right: 30, fontSize: '40px', color: '#00ff00', fontWeight: 'bold', zIndex: 10, textShadow: '0 0 15px lime' }}>{combo}x COMBO</div>}
       {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: '#fff', fontSize: '80px', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: '0 0 20px cyan' }}>{message}</div>}
 
       {gameOver && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Arial' }}>
           <h1 style={{ fontSize: '100px', color: '#ff3333', margin: 0 }}>KAZA!</h1>
+          <h2 style={{ color: 'white' }}>SKOR: {Math.floor(score)}</h2>
           <button onClick={startGame} style={{ padding: '20px 60px', fontSize: '30px', cursor: 'pointer', marginTop: '30px', fontWeight: 'bold', background: 'white', border: 'none', borderRadius: '10px' }}>TEKRAR YARIŞ</button>
         </div>
       )}
 
       <Canvas shadows>
         <PerspectiveCamera makeDefault position={[0, 6, 14]} fov={55} />
-        
         <ambientLight intensity={0.6} color="#ffffff" /> 
         <hemisphereLight skyColor="#445566" groundColor="#223344" intensity={0.6} />
-
         <Suspense fallback={null}>
-           <SkyEnvironment />
+           <group>
+              <Stars radius={150} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
+              <mesh position={[50, 80, -200]}><sphereGeometry args={[10, 32, 32]} /><meshBasicMaterial color="#ffffff" /></mesh>
+              <pointLight position={[50, 80, -180]} intensity={1.5} color="#aabbff" distance={500} />
+           </group>
            <SpeedLines />
            <PlayerCar />
            <Traffic />
