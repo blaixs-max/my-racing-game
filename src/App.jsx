@@ -1,10 +1,10 @@
 import React, { useRef, useEffect, useState, Suspense, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { PerspectiveCamera, Environment, useGLTF, useTexture } from '@react-three/drei';
+import { PerspectiveCamera, Environment, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import { create } from 'zustand';
 
-// --- 1. OYUN VERİ MERKEZİ ---
+// --- 1. OYUN AYARLARI ---
 const useGameStore = create((set, get) => ({
   speed: 0,
   targetSpeed: 20,
@@ -15,90 +15,66 @@ const useGameStore = create((set, get) => ({
   gameOver: false,
   enemies: [],
   message: "", 
-  
   startGame: () => set({ speed: 20, targetSpeed: 90, score: 0, combo: 1, gameOver: false, enemies: [], message: "", lane: 1 }),
-  
   changeLane: (direction) => set((state) => {
     if (state.gameOver) return {};
     return { lane: Math.max(0, Math.min(2, state.lane + direction)) };
   }),
-  
-  accelerate: () => set((state) => !state.gameOver && { targetSpeed: 350 }),
+  accelerate: () => set((state) => !state.gameOver && { targetSpeed: 380 }),
   decelerate: () => set((state) => !state.gameOver && { targetSpeed: 90 }),
-  
   triggerNearMiss: () => {
     const { combo, score } = get();
-    set({ 
-      combo: Math.min(combo + 1, 10), 
-      score: score + (500 * combo),
-      message: `MAKAS! ${combo}x`,
-      lastComboTime: Date.now()
-    });
+    set({ combo: Math.min(combo + 1, 10), score: score + (500 * combo), message: `MAKAS! ${combo}x`, lastComboTime: Date.now() });
     setTimeout(() => set({ message: "" }), 1000);
   },
-
   updateGame: (delta) => set((state) => {
     if (state.gameOver) return { speed: 0, targetSpeed: 0 };
-
     const newSpeed = THREE.MathUtils.lerp(state.speed, state.targetSpeed, delta * 3);
     const newScore = state.score + (newSpeed * delta * 0.2);
-
     let newCombo = state.combo;
     if (Date.now() - state.lastComboTime > 3000 && state.combo > 1) newCombo = 1;
-
-    let newEnemies = state.enemies.map(e => ({
-      ...e,
-      z: e.z + (newSpeed * delta * 0.5),
-      passed: e.passed || false 
-    })).filter(e => e.z < 100); 
-
+    let newEnemies = state.enemies.map(e => ({ ...e, z: e.z + (newSpeed * delta * 0.5), passed: e.passed || false })).filter(e => e.z < 100); 
     const spawnRate = 0.02 + (newSpeed / 10000); 
     if (Math.random() < spawnRate && newEnemies.length < 7) {
       const randomLane = Math.floor(Math.random() * 3); 
       const r = Math.random();
       let type = 'sedan';
       if (r > 0.7) type = 'truck';
-      
       newEnemies.push({ id: Math.random(), lane: randomLane, z: -400 - Math.random() * 200, passed: false, type });
     }
-
     return { speed: newSpeed, score: newScore, enemies: newEnemies, combo: newCombo };
   }),
-
   setGameOver: () => set({ gameOver: true, speed: 0, targetSpeed: 0 })
 }));
 
-// --- 2. OYUNCU ARABASI (BULUTTAN MCLAREN) ---
+// --- 2. OYUNCU ARABASI (KODLA ÇİZİLMİŞ DETAYLI ROADSTER) ---
 function PlayerCar() {
   const { lane, enemies, setGameOver, gameOver, triggerNearMiss, speed } = useGameStore();
   const group = useRef();
+  const wheels = useRef([]);
   
-  // DOSYA YÜKLEMEYE GEREK YOK! Linkten çekiyoruz:
-  const { scene } = useGLTF('https://vazxmixjsiawhamofees.supabase.co/storage/v1/object/public/models/mclaren/model.gltf');
-  const carModel = useMemo(() => scene.clone(), [scene]);
-
-  // Far Hedefleri
+  // Farların hedefi (Aracın önü)
   const leftTarget = useRef();
   const rightTarget = useRef();
-  if (!leftTarget.current) { leftTarget.current = new THREE.Object3D(); leftTarget.current.position.set(-0.5, -0.5, -150); }
-  if (!rightTarget.current) { rightTarget.current = new THREE.Object3D(); rightTarget.current.position.set(0.5, -0.5, -150); }
+  // Hedefleri oluştur
+  if (!leftTarget.current) { leftTarget.current = new THREE.Object3D(); leftTarget.current.position.set(-0.5, -0.5, -100); }
+  if (!rightTarget.current) { rightTarget.current = new THREE.Object3D(); rightTarget.current.position.set(0.5, -0.5, -100); }
 
   const targetX = (lane - 1) * 4.5; 
 
   useFrame((state, delta) => {
     if (gameOver) return;
-
     group.current.position.x = THREE.MathUtils.lerp(group.current.position.x, targetX, delta * 10);
     const tilt = (group.current.position.x - targetX) * 0.1;
     group.current.rotation.z = tilt; 
     group.current.rotation.x = -speed * 0.0002; 
+    wheels.current.forEach(w => { if(w) w.rotation.x += speed * delta * 0.1; });
 
     enemies.forEach(enemy => {
       const enemyX = (enemy.lane - 1) * 4.5;
       const dx = Math.abs(group.current.position.x - enemyX);
       const dz = Math.abs(enemy.z - (-2)); 
-
-      if (dz < 4.0 && dx < 2.0) setGameOver();
+      if (dz < 3.8 && dx < 2.0) setGameOver();
       if (!enemy.passed && dz < 7.0 && dx > 2.2 && dx < 5.0) {
         enemy.passed = true; 
         triggerNearMiss();   
@@ -106,46 +82,90 @@ function PlayerCar() {
     });
   });
 
+  // MATERYALLER
+  const bodyMat = new THREE.MeshStandardMaterial({ color: '#aaaaaa', metalness: 0.9, roughness: 0.2 }); // Gümüş
+  const glassMat = new THREE.MeshStandardMaterial({ color: '#111', roughness: 0.1 });
+  const neonMat = new THREE.MeshStandardMaterial({ color: '#00ffff', emissive: '#00ffff', emissiveIntensity: 2 });
+
   return (
     <group ref={group} position={[0, 0, -2]}>
+      {/* IŞIK HEDEFLERİ */}
       <primitive object={leftTarget.current} />
       <primitive object={rightTarget.current} />
 
-      {/* GÜÇLÜ FARLAR */}
-      <spotLight position={[0.5, 0.8, -1.0]} target={rightTarget.current} angle={0.4} penumbra={0.5} intensity={150} color="#fff" distance={300} />
-      <spotLight position={[-0.5, 0.8, -1.0]} target={leftTarget.current} angle={0.4} penumbra={0.5} intensity={150} color="#fff" distance={300} />
-      
-      {/* Araba Üstü Işık */}
-      <pointLight position={[0, 3, 0]} intensity={3} distance={10} />
+      {/* FARLAR */}
+      <spotLight position={[0.8, 0.6, -1.5]} target={rightTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} castShadow />
+      <spotLight position={[-0.8, 0.6, -1.5]} target={leftTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} castShadow />
+      <pointLight position={[0, 3, 0]} intensity={2} distance={15} />
 
-      {/* MODEL AYARI: Bu model biraz büyük olduğu için scale=0.015 yaptık */}
-      <primitive object={carModel} scale={0.015} rotation={[0, Math.PI, 0]} />
+      {/* --- GÖVDE TASARIMI --- */}
+      <mesh position={[0, 0.4, 0]} material={bodyMat}><boxGeometry args={[1.8, 0.5, 4.2]} /></mesh>
+      {/* Çamurluklar */}
+      <mesh position={[-0.95, 0.3, 1.2]} material={bodyMat}><boxGeometry args={[0.4, 0.4, 1.2]} /></mesh>
+      <mesh position={[0.95, 0.3, 1.2]} material={bodyMat}><boxGeometry args={[0.4, 0.4, 1.2]} /></mesh>
+      <mesh position={[-0.95, 0.3, -1.2]} material={bodyMat}><boxGeometry args={[0.4, 0.4, 1.2]} /></mesh>
+      <mesh position={[0.95, 0.3, -1.2]} material={bodyMat}><boxGeometry args={[0.4, 0.4, 1.2]} /></mesh>
+      {/* Kokpit */}
+      <mesh position={[0, 0.8, -0.3]} material={glassMat}><boxGeometry args={[1.4, 0.5, 2.0]} /></mesh>
+      {/* Spoyler */}
+      <mesh position={[0, 0.9, 1.9]} material={bodyMat}><boxGeometry args={[1.8, 0.1, 0.4]} /></mesh>
+      <mesh position={[-0.7, 0.6, 1.9]} material={bodyMat}><boxGeometry args={[0.1, 0.4, 0.2]} /></mesh>
+      <mesh position={[0.7, 0.6, 1.9]} material={bodyMat}><boxGeometry args={[0.1, 0.4, 0.2]} /></mesh>
+      {/* Neon Şerit */}
+      <mesh position={[0, 0.2, 0]} material={neonMat}><boxGeometry args={[1.7, 0.05, 4.1]} /></mesh>
+
+      {/* Stop Lambaları */}
+      <mesh position={[-0.6, 0.5, 2.11]} material={new THREE.MeshBasicMaterial({color: 'red'})}><boxGeometry args={[0.4, 0.15, 0.1]} /></mesh>
+      <mesh position={[0.6, 0.5, 2.11]} material={new THREE.MeshBasicMaterial({color: 'red'})}><boxGeometry args={[0.4, 0.15, 0.1]} /></mesh>
+
+      {/* Tekerlekler */}
+      {[[-1.0, -1.2], [1.0, -1.2], [-1.0, 1.4], [1.0, 1.4]].map((pos, i) => (
+         <mesh key={i} ref={el => wheels.current[i] = el} position={[pos[0], 0.35, pos[1]]} rotation={[0, 0, Math.PI/2]} material={new THREE.MeshStandardMaterial({color:'#111', roughness:0.8})}>
+           <cylinderGeometry args={[0.4, 0.4, 0.4, 24]} />
+         </mesh>
+      ))}
     </group>
   );
 }
 
-// --- 3. TRAFİK (BULUTTAN MODELLER) ---
+// --- 3. TRAFİK (KODLA ÇİZİLMİŞ DETAYLI ARAÇLAR) ---
 function Traffic() {
   const enemies = useGameStore(state => state.enemies);
-  
-  // İnternetten hazır modeller
-  const truckGltf = useGLTF('https://vazxmixjsiawhamofees.supabase.co/storage/v1/object/public/models/zombie-car/model.gltf');
-  const sedanGltf = useGLTF('https://vazxmixjsiawhamofees.supabase.co/storage/v1/object/public/models/police-car/model.gltf');
+  const truckMat = new THREE.MeshStandardMaterial({ color: '#335577', roughness: 0.5 }); 
+  const containerMat = new THREE.MeshStandardMaterial({ color: '#999', roughness: 0.8 }); 
+  const busMat = new THREE.MeshStandardMaterial({ color: '#ddaa00', roughness: 0.5 }); 
+  const sedanMat = new THREE.MeshStandardMaterial({ color: '#ccc', roughness: 0.3 });
+  const tailLightMat = new THREE.MeshStandardMaterial({ color: '#ff0000', emissive: '#ff0000', emissiveIntensity: 4 });
 
   return (
     <>
       {enemies.map(enemy => {
         const x = (enemy.lane - 1) * 4.5;
-        
-        let scene = enemy.type === 'truck' ? truckGltf.scene : sedanGltf.scene;
-        let clone = useMemo(() => scene.clone(), [scene, enemy.type]);
-
         return (
           <group key={enemy.id} position={[x, 0, enemy.z]}>
-             {/* Scale ayarları: Kamyon ve Araba boyutları */}
-             <primitive object={clone} scale={enemy.type === 'truck' ? 1.8 : 0.6} rotation={[0, 0, 0]} />
-             
-             <pointLight position={[0, 1, 2]} color="red" intensity={3} distance={8} />
+            {enemy.type === 'truck' && (
+               <group>
+                 <mesh position={[0, 2.0, 0]} material={containerMat} castShadow><boxGeometry args={[2.6, 3.2, 7.5]} /></mesh>
+                 <mesh position={[0, 1.2, -4.2]} material={truckMat}><boxGeometry args={[2.6, 2.2, 2.0]} /></mesh>
+                 <mesh position={[-1, 1.0, 3.8]} material={tailLightMat}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
+                 <mesh position={[1, 1.0, 3.8]} material={tailLightMat}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
+               </group>
+            )}
+            {enemy.type === 'bus' && (
+               <group>
+                 <mesh position={[0, 2.0, 0]} material={busMat} castShadow><boxGeometry args={[2.7, 3.4, 10.0]} /></mesh>
+                 <mesh position={[-1, 1.0, 5.1]} material={tailLightMat}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
+                 <mesh position={[1, 1.0, 5.1]} material={tailLightMat}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
+               </group>
+            )}
+            {enemy.type === 'sedan' && (
+               <group>
+                 <mesh position={[0, 0.7, 0]} material={sedanMat} castShadow><boxGeometry args={[2.0, 0.8, 4.2]} /></mesh>
+                 <mesh position={[0, 1.1, -0.3]} material={new THREE.MeshStandardMaterial({color:'#222'})}><boxGeometry args={[1.8, 0.5, 2.2]} /></mesh>
+                 <mesh position={[-0.8, 0.6, 2.2]} material={tailLightMat}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
+                 <mesh position={[0.8, 0.6, 2.2]} material={tailLightMat}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
+               </group>
+            )}
           </group>
         );
       })}
@@ -153,18 +173,18 @@ function Traffic() {
   );
 }
 
-// --- 4. ÇEVRE (PERFORMANS İÇİN KODLA ÇİZİM) ---
+// --- 4. ÇEVRE (AYDINLIK BİNALAR) ---
 const Building = ({ width, height, side, type }) => {
     const isApartment = type === 'apartment';
-    const buildingMat = new THREE.MeshStandardMaterial({ color: '#888888', roughness: 0.8 });
-    const winLitMat = new THREE.MeshStandardMaterial({ color: '#ffaa44', emissive: '#ffaa44', emissiveIntensity: 2 });
+    const buildingMat = new THREE.MeshStandardMaterial({ color: '#666', roughness: 0.9 });
+    const winLitMat = new THREE.MeshStandardMaterial({ color: '#ffaa44', emissive: '#ffaa44', emissiveIntensity: 3 });
     
     const wins = useMemo(() => {
         if (!isApartment) return [];
         const w = [];
         const floors = Math.floor(height / 3);
         for (let i = 1; i < floors; i++) {
-             if (Math.random() > 0.5) w.push([0, i * 3, side * (width/2 + 0.1)]);
+             if (Math.random() > 0.6) w.push([0, i * 3, side * (width/2 + 0.1)]);
         }
         return w;
     }, [height, isApartment, side, width]);
@@ -226,8 +246,8 @@ function SideObjects({ side }) {
     }
   });
 
-  const treeMat = new THREE.MeshStandardMaterial({ color: '#1e3315', roughness: 1 });
-  const trunkMat = new THREE.MeshStandardMaterial({ color: '#3e2723', roughness: 1 });
+  const treeMat = new THREE.MeshStandardMaterial({ color: '#224422', roughness: 1 });
+  const trunkMat = new THREE.MeshStandardMaterial({ color: '#443322', roughness: 1 });
 
   return (
     <group ref={groupRef}>
@@ -246,7 +266,7 @@ function SideObjects({ side }) {
   );
 }
 
-// --- 5. YOL VE BARİYERLER ---
+// --- 5. YOL VE BARİYERLER (PERFORMANS İÇİN DOKUSUZ) ---
 function RoadEnvironment() {
   const { updateGame, speed } = useGameStore();
   const stripesRef = useRef();
@@ -276,13 +296,12 @@ function RoadEnvironment() {
 
   return (
     <group>
-      {/* YOL: Koyu Gri Asfalt */}
+      {/* YOL: Beton Grisi */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
          <planeGeometry args={[20, 1000]} /> 
-         <meshStandardMaterial color="#444" roughness={0.8} />
+         <meshStandardMaterial color="#555" roughness={0.8} />
       </mesh>
 
-      {/* ŞERİTLER */}
       <group ref={stripesRef}>
         {[-2.25, 2.25].map((x) => (
              Array.from({ length: 30 }).map((_, j) => (
@@ -299,7 +318,6 @@ function RoadEnvironment() {
       <SideObjects side={1} />
       <SideObjects side={-1} />
       
-      {/* Zemin */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]}>
           <planeGeometry args={[2000, 2000]} />
           <meshStandardMaterial color="#050505" />
@@ -308,22 +326,17 @@ function RoadEnvironment() {
   );
 }
 
-// --- 6. HIZ EFEKTİ ---
 function SpeedLines() {
   const { speed } = useGameStore();
-  const lines = useMemo(() => new Array(80).fill(0).map(() => ({
-    x: (Math.random() - 0.5) * 50,
-    y: Math.random() * 15,
-    z: (Math.random() - 0.5) * 200,
-    len: Math.random() * 20 + 10
+  const lines = useMemo(() => new Array(100).fill(0).map(() => ({
+    x: (Math.random() - 0.5) * 50, y: Math.random() * 15, z: (Math.random() - 0.5) * 200, len: Math.random() * 20 + 10
   })), []);
-
   const ref = useRef();
   useFrame((state, delta) => {
     if(ref.current) {
       ref.current.children.forEach((line, i) => {
         line.position.z += speed * delta * 0.9;
-        if (line.position.z > 20) line.position.z = -300; 
+        if (line.position.z > 20) line.position.z = -200; 
       });
     }
   });
@@ -331,19 +344,14 @@ function SpeedLines() {
   return (
     <group ref={ref}>
       {lines.map((l, i) => (
-         <mesh key={i} position={[l.x, l.y, l.z]}>
-           <boxGeometry args={[0.04, 0.04, l.len]} />
-           <meshBasicMaterial color="white" transparent opacity={0.15} />
-         </mesh>
+         <mesh key={i} position={[l.x, l.y, l.z]}><boxGeometry args={[0.04, 0.04, l.len]} /><meshBasicMaterial color="white" transparent opacity={0.15} /></mesh>
       ))}
     </group>
   );
 }
 
-// --- 7. ANA UYGULAMA ---
 export default function App() {
   const { speed, score, combo, message, gameOver, startGame, accelerate, decelerate, changeLane } = useGameStore();
-
   useEffect(() => {
     startGame();
     const handleKeyDown = (e) => {
@@ -363,35 +371,38 @@ export default function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#080808', overflow: 'hidden' }}>
       
-      {/* YÜKLEME EKRANI */}
-      <Suspense fallback={<div style={{color:'white', fontSize:'30px', position:'absolute', top:'50%', left:'50%', transform:'translate(-50%, -50%)'}}>ARAÇLAR BULUTTAN İNİYOR...</div>}>
-        
-        <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', zIndex: 10, fontFamily: 'Arial', pointerEvents: 'none' }}>
-          <div style={{ fontSize: '50px', fontWeight: 'bold', fontStyle: 'italic', textShadow: '0 0 10px black' }}>{Math.floor(speed)} <span style={{fontSize: '20px'}}>KM/H</span></div>
-          <div style={{ fontSize: '24px', color: '#ddd', marginTop: '5px' }}>SKOR: {Math.floor(score)}</div>
-          {combo > 1 && <div style={{ fontSize: '40px', color: '#00ff00', fontWeight: 'bold', marginTop: '10px', textShadow: '0 0 15px lime' }}>{combo}x COMBO</div>}
+      {/* LOADING YAZISINA GEREK YOK, ANINDA AÇILIR */}
+      
+      <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', zIndex: 10, fontFamily: 'Arial', pointerEvents: 'none' }}>
+        <div style={{ fontSize: '50px', fontWeight: 'bold', fontStyle: 'italic', textShadow: '0 0 10px black' }}>{Math.floor(speed)} <span style={{fontSize: '20px'}}>KM/H</span></div>
+        <div style={{ fontSize: '24px', color: '#ddd', marginTop: '5px' }}>SKOR: {Math.floor(score)}</div>
+        {combo > 1 && <div style={{ fontSize: '40px', color: '#00ff00', fontWeight: 'bold', marginTop: '10px', textShadow: '0 0 15px lime' }}>{combo}x COMBO</div>}
+      </div>
+
+      {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: '#fff', fontSize: '80px', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: '0 0 20px cyan' }}>{message}</div>}
+
+      {gameOver && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Arial' }}>
+          <h1 style={{ fontSize: '100px', color: '#ff3333', margin: 0 }}>KAZA!</h1>
+          <button onClick={startGame} style={{ padding: '20px 60px', fontSize: '30px', cursor: 'pointer', marginTop: '30px', fontWeight: 'bold', background: 'white', border: 'none', borderRadius: '10px' }}>TEKRAR YARIŞ</button>
         </div>
+      )}
 
-        {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: '#fff', fontSize: '80px', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: '0 0 20px cyan' }}>{message}</div>}
+      <Canvas shadows>
+        <PerspectiveCamera makeDefault position={[0, 6, 14]} fov={55} />
+        
+        <ambientLight intensity={1.5} color="#ffffff" /> 
+        <hemisphereLight skyColor="#88ccff" groundColor="#444444" intensity={1.0} />
+        <fog attach="fog" args={['#080808', 40, 250]} />
 
-        {gameOver && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Arial' }}>
-            <h1 style={{ fontSize: '100px', color: '#ff3333', margin: 0 }}>KAZA!</h1>
-            <button onClick={startGame} style={{ padding: '20px 60px', fontSize: '30px', cursor: 'pointer', marginTop: '30px', fontWeight: 'bold', background: 'white', border: 'none', borderRadius: '10px' }}>TEKRAR YARIŞ</button>
-          </div>
-        )}
-
-        <Canvas shadows>
-          <PerspectiveCamera makeDefault position={[0, 6, 14]} fov={55} />
-          <ambientLight intensity={1.5} color="#ffffff" /> 
-          <hemisphereLight skyColor="#88ccff" groundColor="#444444" intensity={1.0} />
-          <SpeedLines />
-          
-          <PlayerCar />
-          <Traffic />
-          <RoadEnvironment />
-        </Canvas>
-      </Suspense>
+        <SpeedLines />
+        
+        <Suspense fallback={null}>
+           <PlayerCar />
+           <Traffic />
+           <RoadEnvironment />
+        </Suspense>
+      </Canvas>
     </div>
   );
 }
