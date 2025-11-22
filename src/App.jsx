@@ -68,16 +68,16 @@ const useGameStore = create((set, get) => ({
   setGameOver: () => set({ gameOver: true, speed: 0, targetSpeed: 0 })
 }));
 
-// --- 2. OYUNCU ARABASI (BULUTTAN YÜKLENEN MCLAREN) ---
+// --- 2. OYUNCU ARABASI (BULUTTAN MCLAREN) ---
 function PlayerCar() {
   const { lane, enemies, setGameOver, gameOver, triggerNearMiss, speed } = useGameStore();
   const group = useRef();
   
-  // INTERNETTEN HAZIR MODEL (McLaren)
-  // Bu link her zaman çalışır, dosya indirmene gerek yok.
+  // DOSYA YÜKLEMEYE GEREK YOK! Linkten çekiyoruz:
   const { scene } = useGLTF('https://vazxmixjsiawhamofees.supabase.co/storage/v1/object/public/models/mclaren/model.gltf');
   const carModel = useMemo(() => scene.clone(), [scene]);
 
+  // Far Hedefleri
   const leftTarget = useRef();
   const rightTarget = useRef();
   if (!leftTarget.current) { leftTarget.current = new THREE.Object3D(); leftTarget.current.position.set(-0.5, -0.5, -150); }
@@ -114,20 +114,21 @@ function PlayerCar() {
       {/* GÜÇLÜ FARLAR */}
       <spotLight position={[0.5, 0.8, -1.0]} target={rightTarget.current} angle={0.4} penumbra={0.5} intensity={150} color="#fff" distance={300} />
       <spotLight position={[-0.5, 0.8, -1.0]} target={leftTarget.current} angle={0.4} penumbra={0.5} intensity={150} color="#fff" distance={300} />
+      
+      {/* Araba Üstü Işık */}
       <pointLight position={[0, 3, 0]} intensity={3} distance={10} />
 
-      {/* --- MODEL (Scale ile boyutu ayarlandı) --- */}
-      {/* McLaren modeli biraz büyüktür, 0.015 ile küçülttük */}
+      {/* MODEL AYARI: Bu model biraz büyük olduğu için scale=0.015 yaptık */}
       <primitive object={carModel} scale={0.015} rotation={[0, Math.PI, 0]} />
     </group>
   );
 }
 
-// --- 3. TRAFİK (BULUTTAN YÜKLENEN MODELLER) ---
+// --- 3. TRAFİK (BULUTTAN MODELLER) ---
 function Traffic() {
   const enemies = useGameStore(state => state.enemies);
   
-  // Kamyonet ve Polis Arabası Linkleri (Güvenilir CDN)
+  // İnternetten hazır modeller
   const truckGltf = useGLTF('https://vazxmixjsiawhamofees.supabase.co/storage/v1/object/public/models/zombie-car/model.gltf');
   const sedanGltf = useGLTF('https://vazxmixjsiawhamofees.supabase.co/storage/v1/object/public/models/police-car/model.gltf');
 
@@ -141,8 +142,9 @@ function Traffic() {
 
         return (
           <group key={enemy.id} position={[x, 0, enemy.z]}>
-             {/* Araç Boyutlandırma */}
+             {/* Scale ayarları: Kamyon ve Araba boyutları */}
              <primitive object={clone} scale={enemy.type === 'truck' ? 1.8 : 0.6} rotation={[0, 0, 0]} />
+             
              <pointLight position={[0, 1, 2]} color="red" intensity={3} distance={8} />
           </group>
         );
@@ -151,8 +153,7 @@ function Traffic() {
   );
 }
 
-// --- 4. ÇEVRE (BİNALAR - KODLA ÇİZİM) ---
-// Performans için binalar kodla kalmalı.
+// --- 4. ÇEVRE (PERFORMANS İÇİN KODLA ÇİZİM) ---
 const Building = ({ width, height, side, type }) => {
     const isApartment = type === 'apartment';
     const buildingMat = new THREE.MeshStandardMaterial({ color: '#888888', roughness: 0.8 });
@@ -275,12 +276,13 @@ function RoadEnvironment() {
 
   return (
     <group>
-      {/* YOL */}
+      {/* YOL: Koyu Gri Asfalt */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
          <planeGeometry args={[20, 1000]} /> 
          <meshStandardMaterial color="#444" roughness={0.8} />
       </mesh>
 
+      {/* ŞERİTLER */}
       <group ref={stripesRef}>
         {[-2.25, 2.25].map((x) => (
              Array.from({ length: 30 }).map((_, j) => (
@@ -297,6 +299,7 @@ function RoadEnvironment() {
       <SideObjects side={1} />
       <SideObjects side={-1} />
       
+      {/* Zemin */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]}>
           <planeGeometry args={[2000, 2000]} />
           <meshStandardMaterial color="#050505" />
@@ -320,7 +323,7 @@ function SpeedLines() {
     if(ref.current) {
       ref.current.children.forEach((line, i) => {
         line.position.z += speed * delta * 0.9;
-        if (line.position.z > 20) line.position.z = -200; 
+        if (line.position.z > 20) line.position.z = -300; 
       });
     }
   });
@@ -360,7 +363,8 @@ export default function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#080808', overflow: 'hidden' }}>
       
-      <Suspense fallback={<div style={{color:'white', fontSize:'30px', position:'absolute', top:'50%', left:'50%', transform:'translate(-50%, -50%)'}}>ARAÇLAR BULUTTAN YÜKLENİYOR...</div>}>
+      {/* YÜKLEME EKRANI */}
+      <Suspense fallback={<div style={{color:'white', fontSize:'30px', position:'absolute', top:'50%', left:'50%', transform:'translate(-50%, -50%)'}}>ARAÇLAR BULUTTAN İNİYOR...</div>}>
         
         <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', zIndex: 10, fontFamily: 'Arial', pointerEvents: 'none' }}>
           <div style={{ fontSize: '50px', fontWeight: 'bold', fontStyle: 'italic', textShadow: '0 0 10px black' }}>{Math.floor(speed)} <span style={{fontSize: '20px'}}>KM/H</span></div>
@@ -382,6 +386,7 @@ export default function App() {
           <ambientLight intensity={1.5} color="#ffffff" /> 
           <hemisphereLight skyColor="#88ccff" groundColor="#444444" intensity={1.0} />
           <SpeedLines />
+          
           <PlayerCar />
           <Traffic />
           <RoadEnvironment />
