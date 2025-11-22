@@ -6,11 +6,12 @@ import { create } from 'zustand';
 
 // --- 1. OYUN VERİ MERKEZİ ---
 const useGameStore = create((set, get) => ({
-  gameState: 'menu', // menu, countdown, playing, gameover
-  countdown: 5,
+  gameState: 'menu', 
+  countdown: 3,
   speed: 0,
   targetSpeed: 20,
-  lane: 1, 
+  currentX: 0, // ARTIK ŞERİT YOK, X KOORDİNATI VAR
+  targetX: 0,  // Gidilecek hedef nokta
   score: 0,
   combo: 1,
   gameOver: false,
@@ -18,11 +19,10 @@ const useGameStore = create((set, get) => ({
   coins: [],
   message: "", 
   
-  // BAŞLATMA
   startGame: () => {
     set({ 
       gameState: 'countdown', 
-      countdown: 5, 
+      countdown: 3, 
       speed: 0, 
       targetSpeed: 0, 
       score: 0, 
@@ -30,11 +30,12 @@ const useGameStore = create((set, get) => ({
       enemies: [], 
       coins: [],
       message: "", 
-      lane: 1,
+      currentX: 0,
+      targetX: 0,
       gameOver: false
     });
 
-    let count = 5;
+    let count = 3;
     const timer = setInterval(() => {
       count--;
       if (count > 0) {
@@ -47,10 +48,24 @@ const useGameStore = create((set, get) => ({
       }
     }, 1000);
   },
+
+  quitGame: () => {
+    set({ gameState: 'menu', gameOver: false, score: 0, speed: 0 });
+  },
   
-  changeLane: (direction) => set((state) => {
+  // YENİ DİREKSİYON SİSTEMİ (YARIM ŞERİT)
+  steer: (direction) => set((state) => {
     if (state.gameState !== 'playing') return {};
-    return { lane: Math.max(0, Math.min(2, state.lane + direction)) };
+    // Her basışta 2.25 birim kay (Yarım şerit)
+    // Sınırlar: -5.0 (Sol bariyer) ile +5.0 (Sağ bariyer)
+    const step = 2.25;
+    let newX = state.targetX + (direction * step);
+    
+    // Yoldan çıkmayı engelle
+    if (newX > 5.0) newX = 5.0;
+    if (newX < -5.0) newX = -5.0;
+
+    return { targetX: newX };
   }),
   
   accelerate: () => set((state) => state.gameState === 'playing' && { targetSpeed: 380 }),
@@ -71,7 +86,7 @@ const useGameStore = create((set, get) => ({
   updateGame: (delta) => set((state) => {
     if (state.gameState !== 'playing') return { speed: 0 };
 
-    const newSpeed = THREE.MathUtils.lerp(state.speed, state.targetSpeed, delta * 3);
+    const newSpeed = THREE.MathUtils.lerp(state.speed, state.targetSpeed, delta * 2); // Daha yumuşak hızlanma
     const newScore = state.score + (newSpeed * delta * 0.2);
 
     // Düşman Hareketi
@@ -87,56 +102,57 @@ const useGameStore = create((set, get) => ({
       z: c.z + newSpeed * delta * 0.5
     })).filter(c => c.z < 50);
 
-    // Spawn Mantığı (Dinamik Zorluk)
-    const spawnRate = 0.02 + Math.min(state.score / 50000, 0.08); 
-    if (Math.random() < spawnRate && newEnemies.length < 10) {
-      const randomLane = Math.floor(Math.random() * 3);
-      const obstaclesInZone = newEnemies.filter(e => e.z < -300 && e.z > -450).length;
-      
-      if (obstaclesInZone < 2) {
-         const isSafeCar = !newEnemies.some(e => e.lane === randomLane && Math.abs(e.z - -400) < 40);
-         const isSafeCoin = !newCoins.some(c => c.lane === randomLane && Math.abs(c.z - -400) < 40);
+    // ZORLUK SİSTEMİ (Score arttıkça trafik artar)
+    // 0 puanda 0.02, 10.000 puanda 0.05 spawn rate
+    const difficulty = Math.min(state.score / 10000, 1.0); // 0 ile 1 arası
+    const spawnRate = 0.02 + (difficulty * 0.06); 
 
-         if (isSafeCar && isSafeCoin) {
-            const r = Math.random();
-            let type = 'sedan';
-            if (r > 0.7) type = 'truck';
-            else if (r > 0.9) type = 'bus';
-            
-            newEnemies.push({ 
-              id: Math.random(), 
-              lane: randomLane, 
-              x: (randomLane - 1) * 4.5, 
-              z: -400 - Math.random() * 100, 
-              type, 
-              ownSpeed: 80 + Math.random() * 40,
-              passed: false,
-              isChanging: false,
-              targetLane: randomLane
-            });
-         }
+    if (Math.random() < spawnRate && newEnemies.length < 15) { // Max araç sayısı arttı
+      const randomLane = Math.floor(Math.random() * 3);
+      const laneX = (randomLane - 1) * 4.5; // Spawn şeritleri hala standart (-4.5, 0, 4.5)
+      
+      // Güvenli spawn alanı
+      const isSafeCar = !newEnemies.some(e => Math.abs(e.x - laneX) < 2 && Math.abs(e.z - -400) < 50);
+
+      if (isSafeCar) {
+         const r = Math.random();
+         let type = 'sedan';
+         if (r > 0.7) type = 'truck';
+         else if (r > 0.9) type = 'bus';
+         
+         newEnemies.push({ 
+           id: Math.random(), 
+           lane: randomLane, // AI için şerit bilgisi (logic)
+           x: laneX, // Fiziksel konum
+           z: -400 - Math.random() * 100, 
+           type, 
+           ownSpeed: 80 + Math.random() * 40,
+           passed: false,
+           isChanging: false,
+           targetLane: randomLane
+         });
       }
     }
 
     // Altın Spawn
     if (Math.random() < 0.02 && newCoins.length < 5) {
         const coinLane = Math.floor(Math.random() * 3);
-        const isSafeCar = !newEnemies.some(e => e.lane === coinLane && Math.abs(e.z - -400) < 40);
-        const isSafeCoin = !newCoins.some(c => c.lane === coinLane && Math.abs(c.z - -400) < 40);
+        const coinX = (coinLane - 1) * 4.5;
+        const isSafeCar = !newEnemies.some(e => Math.abs(e.x - coinX) < 2 && Math.abs(e.z - -400) < 40);
+        const isSafeCoin = !newCoins.some(c => Math.abs(c.x - coinX) < 2 && Math.abs(c.z - -400) < 40);
 
         if (isSafeCar && isSafeCoin) {
-            newCoins.push({ id: Math.random(), lane: coinLane, x: (coinLane - 1) * 4.5, z: -400 - Math.random() * 50 });
+            newCoins.push({ id: Math.random(), x: coinX, z: -400 - Math.random() * 50 });
         }
     }
 
     return { speed: newSpeed, score: newScore, enemies: newEnemies, coins: newCoins };
   }),
 
-  // GAME OVER TETİKLEYİCİ
   setGameOver: () => set({ gameOver: true, gameState: 'gameover', speed: 0, targetSpeed: 0 })
 }));
 
-// --- 2. GÖSTERGELER ---
+// --- 2. HIZ GÖSTERGESİ (Aynen Korundu) ---
 function Speedometer({ speed }) {
   const maxSpeed = 360;
   const angle = -135 + (speed / maxSpeed) * 270;
@@ -167,33 +183,45 @@ function Speedometer({ speed }) {
   );
 }
 
-// --- 3. OYUNCU ARABASI ---
+// --- 3. OYUNCU ARABASI (YENİ FİZİK) ---
 function PlayerCar() {
-  const { lane, enemies, coins, setGameOver, gameOver, triggerNearMiss, collectCoin, speed } = useGameStore();
+  const { targetX, enemies, coins, setGameOver, gameOver, triggerNearMiss, collectCoin, speed } = useGameStore();
   const group = useRef();
   const wheels = useRef([]);
-  
   const leftTarget = useRef();
   const rightTarget = useRef();
+
   if (!leftTarget.current) { leftTarget.current = new THREE.Object3D(); leftTarget.current.position.set(-0.5, -0.5, -100); }
   if (!rightTarget.current) { rightTarget.current = new THREE.Object3D(); rightTarget.current.position.set(0.5, -0.5, -100); }
-
-  const targetX = (lane - 1) * 4.5; 
 
   useFrame((state, delta) => {
     if (gameOver) return;
     
-    group.current.position.x = THREE.MathUtils.lerp(group.current.position.x, targetX, delta * 10);
-    const tilt = (group.current.position.x - targetX) * 0.15;
-    group.current.rotation.z = tilt; 
+    // 1. HAREKET FİZİĞİ (SMOOTH LERP)
+    // Arabanın şu anki X'i ile hedef X'i arasında yumuşak geçiş
+    const currentX = group.current.position.x;
+    group.current.position.x = THREE.MathUtils.lerp(currentX, targetX, delta * 5); // *5 yumuşaklık katsayısı (düşük = daha kaygan)
+    
+    // 2. GÖVDE YATMASI (BODY ROLL)
+    // Araba ne kadar hızlı yer değiştiriyorsa o kadar yatsın
+    const moveDiff = (group.current.position.x - currentX) / delta; // Anlık yanal hız
+    group.current.rotation.z = -moveDiff * 0.05; // Sağa giderken sola yatar
+    
+    // Burun kalkması
     group.current.rotation.x = -speed * 0.0002; 
+
     wheels.current.forEach(w => { if(w) w.rotation.x += speed * delta * 0.1; });
 
+    // 3. ÇARPIŞMA (Hassas)
     enemies.forEach(enemy => {
       const dx = Math.abs(group.current.position.x - enemy.x);
       const dz = Math.abs(enemy.z - (-2)); 
-      if (dz < 3.8 && dx < 2.0) setGameOver();
-      if (!enemy.passed && dz < 7.0 && dx > 2.2 && dx < 5.0) {
+      
+      // Çarpışma kutusu biraz daraltıldı (Daha affedici)
+      if (dz < 3.5 && dx < 1.8) setGameOver();
+      
+      // Makas
+      if (!enemy.passed && dz < 6.0 && dx > 2.0 && dx < 4.5) {
         enemy.passed = true; 
         triggerNearMiss();   
       }
@@ -240,11 +268,11 @@ function PlayerCar() {
   );
 }
 
-// --- 4. DÖNEN ALTINLAR (TEK BİLEŞEN) ---
+// --- 4. DÖNEN ALTINLAR ---
 function SingleCoin({ x, z }) {
     const group = useRef();
     useFrame((state, delta) => {
-        if(group.current) group.current.rotation.y += delta * 3; // 360 Derece Dönme
+        if(group.current) group.current.rotation.y += delta * 3; 
     });
 
     return (
@@ -310,7 +338,7 @@ function Traffic() {
   );
 }
 
-// --- 5. ÇEVRE ---
+// --- 5. ÇEVRE (DÜZELTİLMİŞ IŞIKLAR & SOL TARAFLAR) ---
 const Building = ({ width, height, side, type }) => {
     const isApartment = type === 'apartment';
     const buildingMat = new THREE.MeshStandardMaterial({ color: '#666', roughness: 0.9 });
@@ -321,7 +349,11 @@ const Building = ({ width, height, side, type }) => {
         const w = [];
         const floors = Math.floor(height / 3);
         for (let i = 1; i < floors; i++) {
-             if (Math.random() > 0.6) w.push([0, i * 3, side * (width/2 + 0.1)]);
+             if (Math.random() > 0.6) {
+                 // Z-Fighting Çözümü: side > 0 ise +0.1, side < 0 ise -0.1 ekliyoruz
+                 // Böylece camlar binanın içine gömülmüyor
+                 w.push([0, i * 3, side * (width/2 + 0.2)]); 
+             }
         }
         return w;
     }, [height, isApartment, side, width]);
@@ -483,12 +515,13 @@ function SkyEnvironment() {
 }
 
 export default function App() {
-  const { speed, score, combo, message, gameOver, gameState, countdown, startGame, accelerate, decelerate, changeLane } = useGameStore();
+  const { speed, score, combo, message, gameOver, gameState, countdown, startGame, quitGame, accelerate, decelerate, steer } = useGameStore();
   
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'ArrowLeft') changeLane(-1);
-      if (e.key === 'ArrowRight') changeLane(1);
+      // DİREKSİYON GÜNCELLEMESİ: 'changeLane' yerine 'steer' kullanıyoruz
+      if (e.key === 'ArrowLeft') steer(-1);
+      if (e.key === 'ArrowRight') steer(1);
       if (e.key === 'ArrowUp') accelerate();
     };
     const handleKeyUp = (e) => { if (e.key === 'ArrowUp') decelerate(); };
@@ -510,7 +543,7 @@ export default function App() {
         </div>
       )}
 
-      {/* BAŞLANGIÇ MENÜSÜ */}
+      {/* MENÜ */}
       {gameState === 'menu' && (
          <div style={{ position: 'absolute', zIndex: 60, inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)' }}>
             <button onClick={startGame} style={{ padding: '20px 60px', fontSize: '30px', background: '#00ff00', color:'#000', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #00ff00' }}>START RACE</button>
@@ -534,12 +567,16 @@ export default function App() {
       {combo > 1 && <div style={{ position: 'absolute', top: 120, right: 30, fontSize: '40px', color: '#00ff00', fontWeight: 'bold', zIndex: 10, textShadow: '0 0 15px lime' }}>{combo}x COMBO</div>}
       {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: '#fff', fontSize: '80px', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: '0 0 20px cyan' }}>{message}</div>}
 
-      {/* GAME OVER - ARTIK ÇALIŞIYOR */}
-      {gameState === 'gameover' && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Arial' }}>
-          <h1 style={{ fontSize: '80px', color: '#ff0000', margin: '0 0 20px 0', textShadow: '0 0 30px red', textTransform: 'uppercase' }}>YOU HAD AN ACCIDENT</h1>
+      {/* GAME OVER MENÜSÜ (QUIT BUTTON EKLENDİ) */}
+      {gameOver && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(50,0,0,0.95)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Arial' }}>
+          <h1 style={{ fontSize: '80px', color: '#ff0000', margin: '0 0 20px 0', textShadow: '0 0 30px red', textTransform: 'uppercase' }}>YOU CRASHED</h1>
           <h2 style={{ color: '#fff', fontSize: '30px', marginBottom: '40px' }}>FINAL SCORE: {Math.floor(score)}</h2>
-          <button onClick={startGame} style={{ padding: '20px 60px', fontSize: '24px', cursor: 'pointer', background: '#fff', color: '#000', border: 'none', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', boxShadow: '0 0 20px white' }}>RESTART THE RACE</button>
+          
+          <div style={{ display: 'flex', gap: '20px' }}>
+            <button onClick={startGame} style={{ padding: '20px 40px', fontSize: '24px', cursor: 'pointer', background: '#fff', color: '#000', border: 'none', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', boxShadow: '0 0 20px white' }}>RESTART</button>
+            <button onClick={quitGame} style={{ padding: '20px 40px', fontSize: '24px', cursor: 'pointer', background: '#333', color: '#fff', border: '1px solid #666', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase' }}>QUIT</button>
+          </div>
         </div>
       )}
 
