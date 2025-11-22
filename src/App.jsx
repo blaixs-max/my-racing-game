@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, Suspense, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { PerspectiveCamera, Environment } from '@react-three/drei';
+import { PerspectiveCamera, Environment, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { create } from 'zustand';
 
@@ -50,7 +50,7 @@ const useGameStore = create((set, get) => ({
       ...e,
       z: e.z + (newSpeed * delta * 0.5),
       passed: e.passed || false 
-    })).filter(e => e.z < 80); 
+    })).filter(e => e.z < 100); 
 
     const spawnRate = 0.02 + (newSpeed / 10000); 
     if (Math.random() < spawnRate && newEnemies.length < 7) {
@@ -58,8 +58,8 @@ const useGameStore = create((set, get) => ({
       const r = Math.random();
       let type = 'sedan';
       if (r > 0.7) type = 'truck';
-      else if (r > 0.9) type = 'bus';
       
+      // Aracı çok uzakta oluşturuyoruz
       newEnemies.push({ id: Math.random(), lane: randomLane, z: -400 - Math.random() * 200, passed: false, type });
     }
 
@@ -69,25 +69,23 @@ const useGameStore = create((set, get) => ({
   setGameOver: () => set({ gameOver: true, speed: 0, targetSpeed: 0 })
 }));
 
-// --- 2. OYUNCU ARABASI (Metalik Gümüş - Parlak) ---
+// --- 2. OYUNCU ARABASI (SENİN MODELİN: HERO.GLB) ---
 function PlayerCar() {
   const { lane, enemies, setGameOver, gameOver, triggerNearMiss, speed } = useGameStore();
   const group = useRef();
-  const wheels = useRef([]);
   
-  const leftTarget = useRef();
-  const rightTarget = useRef();
+  // GitHub'a yüklediğin dosyayı çağırıyoruz
+  const { scene } = useGLTF('/hero.glb');
+  // Modeli klonla (Hata önlemek için)
+  const carModel = useMemo(() => scene.clone(), [scene]);
 
   const targetX = (lane - 1) * 4.5; 
-
-  if (!leftTarget.current) {
-      leftTarget.current = new THREE.Object3D();
-      leftTarget.current.position.set(-0.5, -0.5, -80); 
-  }
-  if (!rightTarget.current) {
-      rightTarget.current = new THREE.Object3D();
-      rightTarget.current.position.set(0.5, -0.5, -80); 
-  }
+  
+  // Farlar için hedef noktalar
+  const leftTarget = useRef();
+  const rightTarget = useRef();
+  if (!leftTarget.current) { leftTarget.current = new THREE.Object3D(); leftTarget.current.position.set(-0.5, -0.5, -80); }
+  if (!rightTarget.current) { rightTarget.current = new THREE.Object3D(); rightTarget.current.position.set(0.5, -0.5, -80); }
 
   useFrame((state, delta) => {
     if (gameOver) return;
@@ -96,90 +94,63 @@ function PlayerCar() {
     const tilt = (group.current.position.x - targetX) * 0.1;
     group.current.rotation.z = tilt; 
     group.current.rotation.x = -speed * 0.0002; 
-    wheels.current.forEach(w => { if(w) w.rotation.x += speed * delta * 0.1; });
 
     enemies.forEach(enemy => {
       const enemyX = (enemy.lane - 1) * 4.5;
       const dx = Math.abs(group.current.position.x - enemyX);
       const dz = Math.abs(enemy.z - (-2)); 
 
-      if (dz < 3.5 && dx < 2.0) setGameOver();
-      if (!enemy.passed && dz < 6.0 && dx > 2.2 && dx < 5.0) {
+      if (dz < 4.0 && dx < 2.0) setGameOver();
+      if (!enemy.passed && dz < 7.0 && dx > 2.2 && dx < 5.0) {
         enemy.passed = true; 
         triggerNearMiss();   
       }
     });
   });
 
-  // GÖRÜNÜRLÜK İÇİN AÇIK RENKLER
-  const bodyColor = new THREE.MeshStandardMaterial({ color: '#dddddd', metalness: 0.8, roughness: 0.2 }); // Gümüş
-  const glassMat = new THREE.MeshStandardMaterial({ color: '#88ccff', roughness: 0.1 }); // Mavi Cam
-  
   return (
     <group ref={group} position={[0, 0, -2]}>
       <primitive object={leftTarget.current} />
       <primitive object={rightTarget.current} />
 
-      {/* FARLAR: Çok Parlak */}
-      <spotLight position={[0.8, 0.6, -1.8]} target={rightTarget.current} angle={0.4} penumbra={0.5} intensity={100} color="#fff" distance={200} />
-      <spotLight position={[-0.8, 0.6, -1.8]} target={leftTarget.current} angle={0.4} penumbra={0.5} intensity={100} color="#fff" distance={200} />
+      {/* FARLAR */}
+      <spotLight position={[0.5, 0.8, -1.0]} target={rightTarget.current} angle={0.4} penumbra={0.5} intensity={100} color="#fff" distance={200} />
+      <spotLight position={[-0.5, 0.8, -1.0]} target={leftTarget.current} angle={0.4} penumbra={0.5} intensity={100} color="#fff" distance={200} />
       
-      {/* Araç kendi etrafını aydınlatsın */}
-      <pointLight position={[0, 3, 0]} intensity={2} distance={10} />
+      {/* Araba Üstü Işık */}
+      <pointLight position={[0, 3, 0]} intensity={3} distance={10} />
 
-      <mesh position={[0, 0.4, 0]} material={bodyColor}><boxGeometry args={[1.8, 0.4, 4.0]} /></mesh>
-      <mesh position={[0, 0.7, -0.5]} material={glassMat}><boxGeometry args={[1.4, 0.4, 1.8]} /></mesh>
-      <mesh position={[0, 0.3, -2.1]} material={bodyColor}><boxGeometry args={[1.5, 0.2, 0.8]} /></mesh>
-      <mesh position={[-0.6, 0.5, 2.05]} material={new THREE.MeshBasicMaterial({color: '#f00'})}><boxGeometry args={[0.3, 0.1, 0.1]} /></mesh>
-      <mesh position={[0.6, 0.5, 2.05]} material={new THREE.MeshBasicMaterial({color: '#f00'})}><boxGeometry args={[0.3, 0.1, 0.1]} /></mesh>
-
-      {[[-1.0, -1.2], [1.0, -1.2], [-1.0, 1.4], [1.0, 1.4]].map((pos, i) => (
-         <mesh key={i} ref={el => wheels.current[i] = el} position={[pos[0], 0.35, pos[1]]} rotation={[0, 0, Math.PI/2]} material={new THREE.MeshStandardMaterial({color:'#333'})}>
-           <cylinderGeometry args={[0.35, 0.35, 0.4, 16]} />
-         </mesh>
-      ))}
+      {/* --- MODEL ENTEGRASYONU --- */}
+      {/* Scale 1.0 standarttır. Araba çok büyükse 0.5 yap, küçükse 2.0 yap */}
+      {/* Rotation [0, Math.PI, 0] arabayı arkaya döndürür. Eğer araba yan gidiyorsa burayı değiştir. */}
+      <primitive object={carModel} scale={1.0} rotation={[0, Math.PI, 0]} />
     </group>
   );
 }
 
-// --- 3. TRAFİK ---
+// --- 3. TRAFİK (SENİN MODELLERİN: TRUCK.GLB & SEDAN.GLB) ---
 function Traffic() {
   const enemies = useGameStore(state => state.enemies);
-  // Daha açık renkli düşman araçları
-  const truckMat = new THREE.MeshStandardMaterial({ color: '#6688aa', roughness: 0.5 }); 
-  const containerMat = new THREE.MeshStandardMaterial({ color: '#cccccc', roughness: 0.6 }); 
-  const busMat = new THREE.MeshStandardMaterial({ color: '#ffcc00', roughness: 0.5 }); 
-  const sedanMat = new THREE.MeshStandardMaterial({ color: '#eeeeee', roughness: 0.4 });
-  const tailLightMat = new THREE.MeshStandardMaterial({ color: '#ff0000', emissive: '#ff0000', emissiveIntensity: 3 });
+  
+  // Modelleri yükle
+  const truckGltf = useGLTF('/truck.glb');
+  const sedanGltf = useGLTF('/sedan.glb');
 
   return (
     <>
       {enemies.map(enemy => {
         const x = (enemy.lane - 1) * 4.5;
+        
+        let scene = enemy.type === 'truck' ? truckGltf.scene : sedanGltf.scene;
+        let clone = useMemo(() => scene.clone(), [scene, enemy.type]);
+
         return (
           <group key={enemy.id} position={[x, 0, enemy.z]}>
-            {enemy.type === 'truck' && (
-               <group>
-                 <mesh position={[0, 2.0, 0]} material={containerMat}><boxGeometry args={[2.5, 3.0, 7.0]} /></mesh>
-                 <mesh position={[0, 1.2, -4.0]} material={truckMat}><boxGeometry args={[2.5, 2.0, 2.0]} /></mesh>
-                 <mesh position={[-1, 1.0, 3.6]} material={tailLightMat}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
-                 <mesh position={[1, 1.0, 3.6]} material={tailLightMat}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
-               </group>
-            )}
-            {enemy.type === 'bus' && (
-               <group>
-                 <mesh position={[0, 2.0, 0]} material={busMat}><boxGeometry args={[2.6, 3.2, 9.5]} /></mesh>
-                 <mesh position={[-1, 1.0, 4.8]} material={tailLightMat}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
-                 <mesh position={[1, 1.0, 4.8]} material={tailLightMat}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
-               </group>
-            )}
-            {enemy.type === 'sedan' && (
-               <group>
-                 <mesh position={[0, 0.7, 0]} material={sedanMat}><boxGeometry args={[2.0, 0.8, 4.2]} /></mesh>
-                 <mesh position={[-0.8, 0.6, 2.2]} material={tailLightMat}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
-                 <mesh position={[0.8, 0.6, 2.2]} material={tailLightMat}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
-               </group>
-            )}
+             {/* Kamyonu biraz daha büyük yapalım (Scale 1.5) */}
+             <primitive object={clone} scale={enemy.type === 'truck' ? 1.5 : 1.0} rotation={[0, 0, 0]} />
+             
+             {/* Arka Stop Işığı */}
+             <pointLight position={[0, 1, 2]} color="red" intensity={3} distance={8} />
           </group>
         );
       })}
@@ -187,10 +158,12 @@ function Traffic() {
   );
 }
 
-// --- 4. AYDINLIK ÇEVRE ---
+// --- 4. ÇEVRE (AYDINLIK BİNALAR - KODLA DEVAM) ---
+// Binaları GLB yaparsak oyun çok kasar ve boyutlar bozulur.
+// Kodla yapılan bu binalar şu anki aydınlatma ile harika görünecek.
 const Building = ({ width, height, side, type }) => {
     const isApartment = type === 'apartment';
-    const buildingMat = new THREE.MeshStandardMaterial({ color: '#888888', roughness: 0.8 }); // Açık gri bina
+    const buildingMat = new THREE.MeshStandardMaterial({ color: '#888888', roughness: 0.8 });
     
     const wins = useMemo(() => {
         if (!isApartment) return [];
@@ -212,7 +185,7 @@ const Building = ({ width, height, side, type }) => {
             {wins.map((pos, i) => (
                 <mesh key={i} position={pos}>
                     <planeGeometry args={[width * 0.6, 1.5]} />
-                    <meshBasicMaterial color="#ffdd88" /> {/* Çok Parlak Camlar */}
+                    <meshBasicMaterial color="#ffdd88" /> {/* Parlak Camlar */}
                 </mesh>
             ))}
             {type === 'small_house' && (
@@ -267,7 +240,7 @@ function SideObjects({ side }) {
     }
   });
 
-  const treeMat = new THREE.MeshStandardMaterial({ color: '#44aa44', roughness: 1 }); // Daha yeşil ağaç
+  const treeMat = new THREE.MeshStandardMaterial({ color: '#44aa44', roughness: 1 });
   const trunkMat = new THREE.MeshStandardMaterial({ color: '#554433', roughness: 1 });
 
   return (
@@ -286,7 +259,6 @@ function SideObjects({ side }) {
     </group>
   );
 }
-
 
 // --- 5. YOL VE BARİYERLER ---
 function RoadEnvironment() {
@@ -341,7 +313,7 @@ function RoadEnvironment() {
       <SideObjects side={1} />
       <SideObjects side={-1} />
       
-      {/* Zemin: Koyu Lacivert/Siyah */}
+      {/* Zemin */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]}>
           <planeGeometry args={[2000, 2000]} />
           <meshStandardMaterial color="#111122" />
@@ -357,7 +329,7 @@ function SpeedLines() {
     x: (Math.random() - 0.5) * 80,
     y: Math.random() * 30,
     z: (Math.random() - 0.5) * 300,
-    len: Math.random() * 20 + 10
+    len: Math.random() * 30 + 10
   })), []);
 
   const ref = useRef();
@@ -403,7 +375,7 @@ export default function App() {
   }, []);
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#111', overflow: 'hidden' }}>
+    <div style={{ width: '100vw', height: '100vh', background: '#080808', overflow: 'hidden' }}>
       
       <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', zIndex: 10, fontFamily: 'Arial', pointerEvents: 'none' }}>
         <div style={{ fontSize: '50px', fontWeight: 'bold', fontStyle: 'italic', textShadow: '0 0 10px black' }}>{Math.floor(speed)} <span style={{fontSize: '20px'}}>KM/H</span></div>
@@ -423,17 +395,15 @@ export default function App() {
       <Canvas shadows>
         <PerspectiveCamera makeDefault position={[0, 6, 14]} fov={55} />
         
-        {/* GÜÇLÜ ORTAM AYDINLATMASI */}
+        {/* AYDINLATMA AYARLARI (Çok önemli) */}
         <ambientLight intensity={1.5} color="#ffffff" /> 
-        {/* GÖKYÜZÜ IŞIĞI (Yukarıdan Mavi, Aşağıdan Gri) */}
         <hemisphereLight skyColor="#88ccff" groundColor="#444444" intensity={1.0} />
-
-        {/* SİS UZAKTA */}
-        <fog attach="fog" args={['#101020', 10, 150]} />
+        <fog attach="fog" args={['#080808', 40, 250]} />
 
         <SpeedLines />
         
-        <Suspense fallback={null}>
+        {/* YÜKLEME EKRANI (Dosyalar inene kadar bekle) */}
+        <Suspense fallback={<mesh position={[0,0,-10]}><boxGeometry /><meshBasicMaterial color="red"/></mesh>}>
            <PlayerCar />
            <Traffic />
            <RoadEnvironment />
