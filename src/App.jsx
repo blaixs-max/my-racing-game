@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, Suspense, useMemo } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { PerspectiveCamera, Environment, useTexture } from '@react-three/drei';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { PerspectiveCamera, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import { create } from 'zustand';
 
@@ -47,16 +47,14 @@ const useGameStore = create((set, get) => ({
   setGameOver: () => set({ gameOver: true, speed: 0, targetSpeed: 0 })
 }));
 
-// --- 2. OYUNCU ARABASI (KODLA ÇİZİLMİŞ DETAYLI ROADSTER) ---
+// --- 2. OYUNCU ARABASI ---
 function PlayerCar() {
   const { lane, enemies, setGameOver, gameOver, triggerNearMiss, speed } = useGameStore();
   const group = useRef();
   const wheels = useRef([]);
   
-  // Farların hedefi (Aracın önü)
   const leftTarget = useRef();
   const rightTarget = useRef();
-  // Hedefleri oluştur
   if (!leftTarget.current) { leftTarget.current = new THREE.Object3D(); leftTarget.current.position.set(-0.5, -0.5, -100); }
   if (!rightTarget.current) { rightTarget.current = new THREE.Object3D(); rightTarget.current.position.set(0.5, -0.5, -100); }
 
@@ -82,43 +80,32 @@ function PlayerCar() {
     });
   });
 
-  // MATERYALLER
-  const bodyMat = new THREE.MeshStandardMaterial({ color: '#aaaaaa', metalness: 0.9, roughness: 0.2 }); // Gümüş
+  const bodyMat = new THREE.MeshStandardMaterial({ color: '#aaaaaa', metalness: 0.9, roughness: 0.2 });
   const glassMat = new THREE.MeshStandardMaterial({ color: '#111', roughness: 0.1 });
   const neonMat = new THREE.MeshStandardMaterial({ color: '#00ffff', emissive: '#00ffff', emissiveIntensity: 2 });
 
   return (
     <group ref={group} position={[0, 0, -2]}>
-      {/* IŞIK HEDEFLERİ */}
       <primitive object={leftTarget.current} />
       <primitive object={rightTarget.current} />
 
-      {/* FARLAR */}
       <spotLight position={[0.8, 0.6, -1.5]} target={rightTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} castShadow />
       <spotLight position={[-0.8, 0.6, -1.5]} target={leftTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} castShadow />
       <pointLight position={[0, 3, 0]} intensity={2} distance={15} />
 
-      {/* --- GÖVDE TASARIMI --- */}
       <mesh position={[0, 0.4, 0]} material={bodyMat}><boxGeometry args={[1.8, 0.5, 4.2]} /></mesh>
-      {/* Çamurluklar */}
       <mesh position={[-0.95, 0.3, 1.2]} material={bodyMat}><boxGeometry args={[0.4, 0.4, 1.2]} /></mesh>
       <mesh position={[0.95, 0.3, 1.2]} material={bodyMat}><boxGeometry args={[0.4, 0.4, 1.2]} /></mesh>
       <mesh position={[-0.95, 0.3, -1.2]} material={bodyMat}><boxGeometry args={[0.4, 0.4, 1.2]} /></mesh>
       <mesh position={[0.95, 0.3, -1.2]} material={bodyMat}><boxGeometry args={[0.4, 0.4, 1.2]} /></mesh>
-      {/* Kokpit */}
       <mesh position={[0, 0.8, -0.3]} material={glassMat}><boxGeometry args={[1.4, 0.5, 2.0]} /></mesh>
-      {/* Spoyler */}
       <mesh position={[0, 0.9, 1.9]} material={bodyMat}><boxGeometry args={[1.8, 0.1, 0.4]} /></mesh>
       <mesh position={[-0.7, 0.6, 1.9]} material={bodyMat}><boxGeometry args={[0.1, 0.4, 0.2]} /></mesh>
       <mesh position={[0.7, 0.6, 1.9]} material={bodyMat}><boxGeometry args={[0.1, 0.4, 0.2]} /></mesh>
-      {/* Neon Şerit */}
       <mesh position={[0, 0.2, 0]} material={neonMat}><boxGeometry args={[1.7, 0.05, 4.1]} /></mesh>
-
-      {/* Stop Lambaları */}
       <mesh position={[-0.6, 0.5, 2.11]} material={new THREE.MeshBasicMaterial({color: 'red'})}><boxGeometry args={[0.4, 0.15, 0.1]} /></mesh>
       <mesh position={[0.6, 0.5, 2.11]} material={new THREE.MeshBasicMaterial({color: 'red'})}><boxGeometry args={[0.4, 0.15, 0.1]} /></mesh>
 
-      {/* Tekerlekler */}
       {[[-1.0, -1.2], [1.0, -1.2], [-1.0, 1.4], [1.0, 1.4]].map((pos, i) => (
          <mesh key={i} ref={el => wheels.current[i] = el} position={[pos[0], 0.35, pos[1]]} rotation={[0, 0, Math.PI/2]} material={new THREE.MeshStandardMaterial({color:'#111', roughness:0.8})}>
            <cylinderGeometry args={[0.4, 0.4, 0.4, 24]} />
@@ -128,7 +115,7 @@ function PlayerCar() {
   );
 }
 
-// --- 3. TRAFİK (KODLA ÇİZİLMİŞ DETAYLI ARAÇLAR) ---
+// --- 3. TRAFİK ---
 function Traffic() {
   const enemies = useGameStore(state => state.enemies);
   const truckMat = new THREE.MeshStandardMaterial({ color: '#335577', roughness: 0.5 }); 
@@ -173,7 +160,7 @@ function Traffic() {
   );
 }
 
-// --- 4. ÇEVRE (AYDINLIK BİNALAR) ---
+// --- 4. ÇEVRE ---
 const Building = ({ width, height, side, type }) => {
     const isApartment = type === 'apartment';
     const buildingMat = new THREE.MeshStandardMaterial({ color: '#666', roughness: 0.9 });
@@ -266,7 +253,7 @@ function SideObjects({ side }) {
   );
 }
 
-// --- 5. YOL VE BARİYERLER (PERFORMANS İÇİN DOKUSUZ) ---
+// --- 5. YOL VE ZEMİN ---
 function RoadEnvironment() {
   const { updateGame, speed } = useGameStore();
   const stripesRef = useRef();
@@ -296,7 +283,6 @@ function RoadEnvironment() {
 
   return (
     <group>
-      {/* YOL: Beton Grisi */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
          <planeGeometry args={[20, 1000]} /> 
          <meshStandardMaterial color="#555" roughness={0.8} />
@@ -318,10 +304,9 @@ function RoadEnvironment() {
       <SideObjects side={1} />
       <SideObjects side={-1} />
       
-      {/* ZEMİN (ÇİM) */}
+      {/* ZEMİN (YEŞİL ÇİM) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]}>
           <planeGeometry args={[2000, 2000]} />
-          {/* Koyu yeşil çim rengi ve mat doku */}
           <meshStandardMaterial color="#2e8b57" roughness={1.0} metalness={0.0} />
       </mesh>
     </group>
@@ -352,6 +337,22 @@ function SpeedLines() {
   );
 }
 
+// --- YENİ GÖKYÜZÜ BİLEŞENİ ---
+function SkyBackground() {
+  const { scene } = useThree();
+  // Ay ve yıldızlı gece gökyüzü texture'ı
+  const skyTexture = useTexture('https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80');
+
+  useEffect(() => {
+    scene.background = skyTexture;
+    return () => {
+      scene.background = null;
+    };
+  }, [scene, skyTexture]);
+
+  return null;
+}
+
 export default function App() {
   const { speed, score, combo, message, gameOver, startGame, accelerate, decelerate, changeLane } = useGameStore();
   useEffect(() => {
@@ -373,8 +374,6 @@ export default function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#080808', overflow: 'hidden' }}>
       
-      {/* LOADING YAZISINA GEREK YOK, ANINDA AÇILIR */}
-      
       <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', zIndex: 10, fontFamily: 'Arial', pointerEvents: 'none' }}>
         <div style={{ fontSize: '50px', fontWeight: 'bold', fontStyle: 'italic', textShadow: '0 0 10px black' }}>{Math.floor(speed)} <span style={{fontSize: '20px'}}>KM/H</span></div>
         <div style={{ fontSize: '24px', color: '#ddd', marginTop: '5px' }}>SKOR: {Math.floor(score)}</div>
@@ -393,13 +392,13 @@ export default function App() {
       <Canvas shadows>
         <PerspectiveCamera makeDefault position={[0, 6, 14]} fov={55} />
         
-        <ambientLight intensity={1.5} color="#ffffff" /> 
-        <hemisphereLight skyColor="#88ccff" groundColor="#444444" intensity={1.0} />
-        <fog attach="fog" args={['#080808', 40, 250]} />
+        <ambientLight intensity={0.8} color="#ffffff" /> 
+        <hemisphereLight skyColor="#445566" groundColor="#223344" intensity={0.6} />
+        {/* Fog'u kaldırdım ki gökyüzü net görünsün */}
 
-        <SpeedLines />
-        
         <Suspense fallback={null}>
+           <SkyBackground />
+           <SpeedLines />
            <PlayerCar />
            <Traffic />
            <RoadEnvironment />
