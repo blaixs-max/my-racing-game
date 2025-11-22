@@ -47,7 +47,133 @@ const useGameStore = create((set, get) => ({
   setGameOver: () => set({ gameOver: true, speed: 0, targetSpeed: 0 })
 }));
 
-// --- 2. OYUNCU ARABASI ---
+// --- 2. YENİ HIZ GÖSTERGESİ BİLEŞENİ ---
+function Speedometer({ speed }) {
+  // Hızı açıya dönüştür. 0 km/h -> -135 derece, 360 km/h -> +135 derece
+  // Gösterge 270 derecelik bir yay çiziyor.
+  const maxSpeed = 360;
+  const angle = -135 + (speed / maxSpeed) * 270;
+
+  const containerStyle = {
+    position: 'relative',
+    width: '200px',
+    height: '200px',
+    background: 'radial-gradient(circle at center, #1a1a2e 0%, #0f0f1a 70%)',
+    borderRadius: '50%',
+    border: '5px solid #2e2e4e',
+    boxShadow: '0 0 20px rgba(0, 255, 255, 0.2), inset 0 0 10px rgba(0,0,0,0.5)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    color: '#fff',
+    fontFamily: 'Arial, sans-serif',
+  };
+
+  // Kadran çizgileri ve sayıları için yardımcı fonksiyon
+  const renderMarks = () => {
+    const marks = [];
+    for (let i = 0; i <= maxSpeed; i += 30) {
+      const markAngle = -135 + (i / maxSpeed) * 270;
+      const isMajor = i % 60 === 0;
+      const length = isMajor ? '15px' : '10px';
+      const width = isMajor ? '3px' : '2px';
+      const color = i >= 240 ? '#ff3333' : '#00ff00'; // 240'tan sonra kırmızı
+
+      // Çizgi
+      marks.push(
+        <div
+          key={`line-${i}`}
+          style={{
+            position: 'absolute',
+            bottom: '50%',
+            left: '50%',
+            width: width,
+            height: '100px',
+            transformOrigin: 'bottom center',
+            transform: `translateX(-50%) rotate(${markAngle}deg)`,
+          }}
+        >
+          <div style={{ width: '100%', height: length, background: color, position: 'absolute', top: 0 }}></div>
+        </div>
+      );
+
+      // Sayı (Sadece ana çizgiler için)
+      if (isMajor) {
+        // Sayının konumunu hesaplamak için biraz trigonometri
+        const radius = 70; // Merkeze olan uzaklık
+        const rad = (markAngle - 90) * (Math.PI / 180); // Açıyı radyana çevir ve düzelt
+        const x = Math.cos(rad) * radius;
+        const y = Math.sin(rad) * radius;
+
+        marks.push(
+          <div
+            key={`num-${i}`}
+            style={{
+              position: 'absolute',
+              top: `calc(50% + ${y}px)`,
+              left: `calc(50% + ${x}px)`,
+              transform: 'translate(-50%, -50%)',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              color: color,
+              textShadow: `0 0 5px ${color}`,
+            }}
+          >
+            {i}
+          </div>
+        );
+      }
+    }
+    return marks;
+  };
+
+  return (
+    <div style={containerStyle}>
+      {/* Kadran Çizgileri ve Sayıları */}
+      {renderMarks()}
+
+      {/* Dijital Hız Değeri */}
+      <div style={{ position: 'absolute', top: '65%', textAlign: 'center' }}>
+        <div style={{ fontSize: '32px', fontWeight: 'bold', textShadow: '0 0 10px #00ff00' }}>
+          {Math.floor(speed)}
+        </div>
+        <div style={{ fontSize: '12px', color: '#aaa' }}>km/h</div>
+      </div>
+
+      {/* İbre (Needle) */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '50%',
+          left: '50%',
+          width: '6px',
+          height: '85px',
+          background: 'linear-gradient(to top, #ff3333, #ff6666)',
+          transformOrigin: 'bottom center',
+          transform: `translateX(-50%) rotate(${angle}deg)`,
+          borderRadius: '50% 50% 0 0',
+          boxShadow: '0 0 10px rgba(255, 50, 50, 0.5)',
+          zIndex: 2,
+        }}
+      ></div>
+      {/* İbrenin Merkezi */}
+      <div
+        style={{
+          position: 'absolute',
+          width: '20px',
+          height: '20px',
+          background: '#333',
+          borderRadius: '50%',
+          border: '3px solid #ff3333',
+          zIndex: 3,
+        }}
+      ></div>
+    </div>
+  );
+}
+
+
+// --- 3. OYUNCU ARABASI ---
 function PlayerCar() {
   const { lane, enemies, setGameOver, gameOver, triggerNearMiss, speed } = useGameStore();
   const group = useRef();
@@ -115,7 +241,7 @@ function PlayerCar() {
   );
 }
 
-// --- 3. TRAFİK ---
+// --- 4. TRAFİK ---
 function Traffic() {
   const enemies = useGameStore(state => state.enemies);
   const truckMat = new THREE.MeshStandardMaterial({ color: '#335577', roughness: 0.5 }); 
@@ -160,7 +286,7 @@ function Traffic() {
   );
 }
 
-// --- 4. ÇEVRE ---
+// --- 5. ÇEVRE ---
 const Building = ({ width, height, side, type }) => {
     const isApartment = type === 'apartment';
     const buildingMat = new THREE.MeshStandardMaterial({ color: '#666', roughness: 0.9 });
@@ -253,7 +379,7 @@ function SideObjects({ side }) {
   );
 }
 
-// --- 5. YOL VE ZEMİN ---
+// --- 6. YOL VE ZEMİN ---
 function RoadEnvironment() {
   const { updateGame, speed } = useGameStore();
   const stripesRef = useRef();
@@ -337,10 +463,9 @@ function SpeedLines() {
   );
 }
 
-// --- YENİ GÖKYÜZÜ BİLEŞENİ ---
+// --- GÖKYÜZÜ BİLEŞENİ ---
 function SkyBackground() {
   const { scene } = useThree();
-  // Ay ve yıldızlı gece gökyüzü texture'ı
   const skyTexture = useTexture('https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80');
 
   useEffect(() => {
@@ -353,6 +478,7 @@ function SkyBackground() {
   return null;
 }
 
+// --- 7. ANA UYGULAMA ---
 export default function App() {
   const { speed, score, combo, message, gameOver, startGame, accelerate, decelerate, changeLane } = useGameStore();
   useEffect(() => {
@@ -374,9 +500,14 @@ export default function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#080808', overflow: 'hidden' }}>
       
-      <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', zIndex: 10, fontFamily: 'Arial', pointerEvents: 'none' }}>
-        <div style={{ fontSize: '50px', fontWeight: 'bold', fontStyle: 'italic', textShadow: '0 0 10px black' }}>{Math.floor(speed)} <span style={{fontSize: '20px'}}>KM/H</span></div>
-        <div style={{ fontSize: '24px', color: '#ddd', marginTop: '5px' }}>SKOR: {Math.floor(score)}</div>
+      {/* --- YENİ HIZ GÖSTERGESİ --- */}
+      <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 10, pointerEvents: 'none' }}>
+        <Speedometer speed={speed} />
+      </div>
+
+      {/* SKOR VE COMBO (Hız göstergesinin altına alındı) */}
+      <div style={{ position: 'absolute', top: 230, left: 20, color: '#fff', zIndex: 10, fontFamily: 'Arial', pointerEvents: 'none' }}>
+        <div style={{ fontSize: '24px', color: '#ddd' }}>SKOR: {Math.floor(score)}</div>
         {combo > 1 && <div style={{ fontSize: '40px', color: '#00ff00', fontWeight: 'bold', marginTop: '10px', textShadow: '0 0 15px lime' }}>{combo}x COMBO</div>}
       </div>
 
@@ -394,7 +525,6 @@ export default function App() {
         
         <ambientLight intensity={0.8} color="#ffffff" /> 
         <hemisphereLight skyColor="#445566" groundColor="#223344" intensity={0.6} />
-        {/* Fog'u kaldırdım ki gökyüzü net görünsün */}
 
         <Suspense fallback={null}>
            <SkyBackground />
