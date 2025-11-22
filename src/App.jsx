@@ -59,7 +59,6 @@ const useGameStore = create((set, get) => ({
       let type = 'sedan';
       if (r > 0.7) type = 'truck';
       
-      // Aracı çok uzakta oluşturuyoruz
       newEnemies.push({ id: Math.random(), lane: randomLane, z: -400 - Math.random() * 200, passed: false, type });
     }
 
@@ -69,23 +68,22 @@ const useGameStore = create((set, get) => ({
   setGameOver: () => set({ gameOver: true, speed: 0, targetSpeed: 0 })
 }));
 
-// --- 2. OYUNCU ARABASI (SENİN MODELİN: HERO.GLB) ---
+// --- 2. OYUNCU ARABASI (GLB MODEL YÜKLEYİCİ) ---
 function PlayerCar() {
   const { lane, enemies, setGameOver, gameOver, triggerNearMiss, speed } = useGameStore();
   const group = useRef();
   
-  // GitHub'a yüklediğin dosyayı çağırıyoruz
+  // MODELİ YÜKLE
   const { scene } = useGLTF('/hero.glb');
-  // Modeli klonla (Hata önlemek için)
   const carModel = useMemo(() => scene.clone(), [scene]);
 
-  const targetX = (lane - 1) * 4.5; 
-  
-  // Farlar için hedef noktalar
+  // FAR HEDEFLERİ
   const leftTarget = useRef();
   const rightTarget = useRef();
   if (!leftTarget.current) { leftTarget.current = new THREE.Object3D(); leftTarget.current.position.set(-0.5, -0.5, -80); }
   if (!rightTarget.current) { rightTarget.current = new THREE.Object3D(); rightTarget.current.position.set(0.5, -0.5, -80); }
+
+  const targetX = (lane - 1) * 4.5; 
 
   useFrame((state, delta) => {
     if (gameOver) return;
@@ -113,26 +111,23 @@ function PlayerCar() {
       <primitive object={leftTarget.current} />
       <primitive object={rightTarget.current} />
 
-      {/* FARLAR */}
+      {/* GÜÇLÜ FARLAR */}
       <spotLight position={[0.5, 0.8, -1.0]} target={rightTarget.current} angle={0.4} penumbra={0.5} intensity={100} color="#fff" distance={200} />
       <spotLight position={[-0.5, 0.8, -1.0]} target={leftTarget.current} angle={0.4} penumbra={0.5} intensity={100} color="#fff" distance={200} />
       
-      {/* Araba Üstü Işık */}
       <pointLight position={[0, 3, 0]} intensity={3} distance={10} />
 
-      {/* --- MODEL ENTEGRASYONU --- */}
-      {/* Scale 1.0 standarttır. Araba çok büyükse 0.5 yap, küçükse 2.0 yap */}
-      {/* Rotation [0, Math.PI, 0] arabayı arkaya döndürür. Eğer araba yan gidiyorsa burayı değiştir. */}
+      {/* GERÇEK MODELİ ÇİZ */}
+      {/* Arabanın boyutuna göre scale'i ayarla (1.0, 1.5 veya 0.5) */}
       <primitive object={carModel} scale={1.0} rotation={[0, Math.PI, 0]} />
     </group>
   );
 }
 
-// --- 3. TRAFİK (SENİN MODELLERİN: TRUCK.GLB & SEDAN.GLB) ---
+// --- 3. TRAFİK (GLB MODELLERİ) ---
 function Traffic() {
   const enemies = useGameStore(state => state.enemies);
   
-  // Modelleri yükle
   const truckGltf = useGLTF('/truck.glb');
   const sedanGltf = useGLTF('/sedan.glb');
 
@@ -146,10 +141,7 @@ function Traffic() {
 
         return (
           <group key={enemy.id} position={[x, 0, enemy.z]}>
-             {/* Kamyonu biraz daha büyük yapalım (Scale 1.5) */}
              <primitive object={clone} scale={enemy.type === 'truck' ? 1.5 : 1.0} rotation={[0, 0, 0]} />
-             
-             {/* Arka Stop Işığı */}
              <pointLight position={[0, 1, 2]} color="red" intensity={3} distance={8} />
           </group>
         );
@@ -158,21 +150,18 @@ function Traffic() {
   );
 }
 
-// --- 4. ÇEVRE (AYDINLIK BİNALAR - KODLA DEVAM) ---
-// Binaları GLB yaparsak oyun çok kasar ve boyutlar bozulur.
-// Kodla yapılan bu binalar şu anki aydınlatma ile harika görünecek.
+// --- 4. ÇEVRE (BİNALAR - PERFORMANS İÇİN KODLA ÇİZİM) ---
 const Building = ({ width, height, side, type }) => {
     const isApartment = type === 'apartment';
     const buildingMat = new THREE.MeshStandardMaterial({ color: '#888888', roughness: 0.8 });
+    const winLitMat = new THREE.MeshStandardMaterial({ color: '#ffaa44', emissive: '#ffaa44', emissiveIntensity: 2 });
     
     const wins = useMemo(() => {
         if (!isApartment) return [];
         const w = [];
         const floors = Math.floor(height / 3);
         for (let i = 1; i < floors; i++) {
-             if (Math.random() > 0.5) { 
-                 w.push([0, i * 3, side * (width/2 + 0.1)]);
-             }
+             if (Math.random() > 0.5) w.push([0, i * 3, side * (width/2 + 0.1)]);
         }
         return w;
     }, [height, isApartment, side, width]);
@@ -183,9 +172,8 @@ const Building = ({ width, height, side, type }) => {
                 <boxGeometry args={[width, height, width]} />
             </mesh>
             {wins.map((pos, i) => (
-                <mesh key={i} position={pos}>
+                <mesh key={i} position={pos} material={winLitMat}>
                     <planeGeometry args={[width * 0.6, 1.5]} />
-                    <meshBasicMaterial color="#ffdd88" /> {/* Parlak Camlar */}
                 </mesh>
             ))}
             {type === 'small_house' && (
@@ -200,7 +188,6 @@ const Building = ({ width, height, side, type }) => {
 
 function SideObjects({ side }) {
   const { speed } = useGameStore();
-  
   const objects = useMemo(() => {
     return new Array(30).fill(0).map((_, i) => {
       const rand = Math.random();
@@ -210,11 +197,7 @@ function SideObjects({ side }) {
       if (rand > 0.8) { type = 'apartment'; height = 30 + Math.random() * 40; width = 12; }
       else if (rand > 0.5) { type = 'small_house'; height = 6; width = 8; } 
       else if (rand > 0.2) { type = 'tree'; } 
-      return {
-        z: -i * 50, 
-        type, height, width,
-        offset: (Math.random() - 0.5) * 20
-      };
+      return { z: -i * 50, type, height, width, offset: (Math.random() - 0.5) * 20 };
     });
   }, []);
 
@@ -240,8 +223,8 @@ function SideObjects({ side }) {
     }
   });
 
-  const treeMat = new THREE.MeshStandardMaterial({ color: '#44aa44', roughness: 1 });
-  const trunkMat = new THREE.MeshStandardMaterial({ color: '#554433', roughness: 1 });
+  const treeMat = new THREE.MeshStandardMaterial({ color: '#1e3315', roughness: 1 });
+  const trunkMat = new THREE.MeshStandardMaterial({ color: '#3e2723', roughness: 1 });
 
   return (
     <group ref={groupRef}>
@@ -260,7 +243,7 @@ function SideObjects({ side }) {
   );
 }
 
-// --- 5. YOL VE BARİYERLER ---
+// --- 5. YOL VE BARİYERLER (PERFORMANS İÇİN DOKUSUZ) ---
 function RoadEnvironment() {
   const { updateGame, speed } = useGameStore();
   const stripesRef = useRef();
@@ -278,11 +261,11 @@ function RoadEnvironment() {
   const Barrier = ({ x }) => (
       <group position={[x, 0, 0]}>
           {Array.from({length: 40}).map((_, i) => (
-             <mesh key={i} position={[0, 0.5, -i * 10]} material={new THREE.MeshStandardMaterial({color: '#bbb'})}>
+             <mesh key={i} position={[0, 0.5, -i * 10]} material={new THREE.MeshStandardMaterial({color: '#999'})}>
                 <boxGeometry args={[0.2, 1.0, 0.2]} />
              </mesh>
           ))}
-          <mesh position={[0, 0.8, -200]} material={new THREE.MeshStandardMaterial({color: '#dbe4eb', metalness: 0.5, roughness: 0.3})}>
+          <mesh position={[0, 0.8, -200]} material={new THREE.MeshStandardMaterial({color: '#B0C4DE', metalness: 0.6, roughness: 0.4})}>
               <boxGeometry args={[0.3, 0.4, 1000]} />
           </mesh>
       </group>
@@ -290,17 +273,16 @@ function RoadEnvironment() {
 
   return (
     <group>
-      {/* YOL: Açık Gri (#666) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
          <planeGeometry args={[20, 1000]} /> 
-         <meshStandardMaterial color="#666" roughness={0.5} />
+         <meshStandardMaterial color="#444" roughness={0.8} />
       </mesh>
 
       <group ref={stripesRef}>
         {[-2.25, 2.25].map((x) => (
              Array.from({ length: 30 }).map((_, j) => (
                 <mesh key={`${x}-${j}`} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.02, -j * 20]}>
-                    <planeGeometry args={[0.2, 6]} /> 
+                    <planeGeometry args={[0.25, 6]} /> 
                     <meshBasicMaterial color="#fff" />
                 </mesh>
              ))
@@ -309,27 +291,25 @@ function RoadEnvironment() {
 
       <Barrier x={-10.5} />
       <Barrier x={10.5} />
-
       <SideObjects side={1} />
       <SideObjects side={-1} />
       
-      {/* Zemin */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]}>
           <planeGeometry args={[2000, 2000]} />
-          <meshStandardMaterial color="#111122" />
+          <meshStandardMaterial color="#050505" />
       </mesh>
     </group>
   );
 }
 
-// --- 6. HIZ EFEKTİ ---
+// --- 6. HIZ EFEKTLERİ ---
 function SpeedLines() {
   const { speed } = useGameStore();
-  const lines = useMemo(() => new Array(150).fill(0).map(() => ({
-    x: (Math.random() - 0.5) * 80,
-    y: Math.random() * 30,
-    z: (Math.random() - 0.5) * 300,
-    len: Math.random() * 30 + 10
+  const lines = useMemo(() => new Array(80).fill(0).map(() => ({
+    x: (Math.random() - 0.5) * 50,
+    y: Math.random() * 15,
+    z: (Math.random() - 0.5) * 200,
+    len: Math.random() * 20 + 10
   })), []);
 
   const ref = useRef();
@@ -337,7 +317,7 @@ function SpeedLines() {
     if(ref.current) {
       ref.current.children.forEach((line, i) => {
         line.position.z += speed * delta * 0.9;
-        if (line.position.z > 20) line.position.z = -300; 
+        if (line.position.z > 20) line.position.z = -200; 
       });
     }
   });
@@ -346,8 +326,8 @@ function SpeedLines() {
     <group ref={ref}>
       {lines.map((l, i) => (
          <mesh key={i} position={[l.x, l.y, l.z]}>
-           <boxGeometry args={[0.05, 0.05, l.len]} />
-           <meshBasicMaterial color="white" transparent opacity={0.2} />
+           <boxGeometry args={[0.04, 0.04, l.len]} />
+           <meshBasicMaterial color="white" transparent opacity={0.15} />
          </mesh>
       ))}
     </group>
@@ -377,38 +357,37 @@ export default function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#080808', overflow: 'hidden' }}>
       
-      <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', zIndex: 10, fontFamily: 'Arial', pointerEvents: 'none' }}>
-        <div style={{ fontSize: '50px', fontWeight: 'bold', fontStyle: 'italic', textShadow: '0 0 10px black' }}>{Math.floor(speed)} <span style={{fontSize: '20px'}}>KM/H</span></div>
-        <div style={{ fontSize: '24px', color: '#ddd', marginTop: '5px' }}>SKOR: {Math.floor(score)}</div>
-        {combo > 1 && <div style={{ fontSize: '40px', color: '#00ff00', fontWeight: 'bold', marginTop: '10px', textShadow: '0 0 15px lime' }}>{combo}x COMBO</div>}
-      </div>
-
-      {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: '#fff', fontSize: '80px', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: '0 0 20px cyan' }}>{message}</div>}
-
-      {gameOver && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Arial' }}>
-          <h1 style={{ fontSize: '100px', color: '#ff3333', margin: 0 }}>KAZA!</h1>
-          <button onClick={startGame} style={{ padding: '20px 60px', fontSize: '30px', cursor: 'pointer', marginTop: '30px', fontWeight: 'bold', background: 'white', border: 'none', borderRadius: '10px' }}>TEKRAR YARIŞ</button>
+      <Suspense fallback={<div style={{color:'white', fontSize:'30px', position:'absolute', top:'50%', left:'50%', transform:'translate(-50%, -50%)'}}>ARAÇLAR YÜKLENİYOR...</div>}>
+        
+        <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff', zIndex: 10, fontFamily: 'Arial', pointerEvents: 'none' }}>
+          <div style={{ fontSize: '50px', fontWeight: 'bold', fontStyle: 'italic', textShadow: '0 0 10px black' }}>{Math.floor(speed)} <span style={{fontSize: '20px'}}>KM/H</span></div>
+          <div style={{ fontSize: '24px', color: '#ddd', marginTop: '5px' }}>SKOR: {Math.floor(score)}</div>
+          {combo > 1 && <div style={{ fontSize: '40px', color: '#00ff00', fontWeight: 'bold', marginTop: '10px', textShadow: '0 0 15px lime' }}>{combo}x COMBO</div>}
         </div>
-      )}
 
-      <Canvas shadows>
-        <PerspectiveCamera makeDefault position={[0, 6, 14]} fov={55} />
-        
-        {/* AYDINLATMA AYARLARI (Çok önemli) */}
-        <ambientLight intensity={1.5} color="#ffffff" /> 
-        <hemisphereLight skyColor="#88ccff" groundColor="#444444" intensity={1.0} />
-        <fog attach="fog" args={['#080808', 40, 250]} />
+        {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: '#fff', fontSize: '80px', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: '0 0 20px cyan' }}>{message}</div>}
 
-        <SpeedLines />
-        
-        {/* YÜKLEME EKRANI (Dosyalar inene kadar bekle) */}
-        <Suspense fallback={<mesh position={[0,0,-10]}><boxGeometry /><meshBasicMaterial color="red"/></mesh>}>
-           <PlayerCar />
-           <Traffic />
-           <RoadEnvironment />
-        </Suspense>
-      </Canvas>
+        {gameOver && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Arial' }}>
+            <h1 style={{ fontSize: '100px', color: '#ff3333', margin: 0 }}>KAZA!</h1>
+            <button onClick={startGame} style={{ padding: '20px 60px', fontSize: '30px', cursor: 'pointer', marginTop: '30px', fontWeight: 'bold', background: 'white', border: 'none', borderRadius: '10px' }}>TEKRAR YARIŞ</button>
+          </div>
+        )}
+
+        <Canvas shadows>
+          <PerspectiveCamera makeDefault position={[0, 6, 14]} fov={55} />
+          
+          <ambientLight intensity={1.5} color="#ffffff" /> 
+          <hemisphereLight skyColor="#88ccff" groundColor="#444444" intensity={1.0} />
+          <fog attach="fog" args={['#080808', 40, 250]} />
+
+          <SpeedLines />
+          
+          <PlayerCar />
+          <Traffic />
+          <RoadEnvironment />
+        </Canvas>
+      </Suspense>
     </div>
   );
 }
