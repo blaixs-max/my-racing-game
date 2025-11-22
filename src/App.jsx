@@ -6,37 +6,47 @@ import { create } from 'zustand';
 
 // --- 1. OYUN VERİ MERKEZİ ---
 const useGameStore = create((set, get) => ({
-  gameState: 'menu', 
+  gameState: 'menu', // menu, countdown, playing, gameover
   countdown: 5,
   speed: 0,
   targetSpeed: 20,
   lane: 1, 
   score: 0,
   combo: 1,
-  lastComboTime: 0,
   gameOver: false,
   enemies: [],
   coins: [],
   message: "", 
   
-  startGame: () => set({ 
-    gameState: 'countdown', 
-    countdown: 5, 
-    speed: 0, 
-    targetSpeed: 0, 
-    score: 0, 
-    combo: 1, 
-    enemies: [], 
-    coins: [],
-    message: "", 
-    lane: 1,
-    gameOver: false 
-  }),
+  // BAŞLATMA
+  startGame: () => {
+    set({ 
+      gameState: 'countdown', 
+      countdown: 5, 
+      speed: 0, 
+      targetSpeed: 0, 
+      score: 0, 
+      combo: 1, 
+      enemies: [], 
+      coins: [],
+      message: "", 
+      lane: 1,
+      gameOver: false
+    });
 
-  // Sayacı güncelleme fonksiyonu
-  setCountdown: (val) => set({ countdown: val }),
-  setGameState: (state) => set({ gameState: state }),
-  setGameSpeed: (s, t) => set({ speed: s, targetSpeed: t }),
+    let count = 5;
+    const timer = setInterval(() => {
+      count--;
+      if (count > 0) {
+        set({ countdown: count });
+      } else if (count === 0) {
+        set({ countdown: "GO!" });
+      } else {
+        clearInterval(timer);
+        set({ gameState: 'playing', countdown: null, speed: 20, targetSpeed: 90 });
+      }
+    }, 1000);
+  },
   
   changeLane: (direction) => set((state) => {
     if (state.gameState !== 'playing') return {};
@@ -77,7 +87,7 @@ const useGameStore = create((set, get) => ({
       z: c.z + newSpeed * delta * 0.5
     })).filter(c => c.z < 50);
 
-    // Spawn
+    // Spawn Mantığı (Dinamik Zorluk)
     const spawnRate = 0.02 + Math.min(state.score / 50000, 0.08); 
     if (Math.random() < spawnRate && newEnemies.length < 10) {
       const randomLane = Math.floor(Math.random() * 3);
@@ -122,7 +132,7 @@ const useGameStore = create((set, get) => ({
     return { speed: newSpeed, score: newScore, enemies: newEnemies, coins: newCoins };
   }),
 
-  // DÜZELTİLDİ: Kaza yapınca gameState de değişiyor
+  // GAME OVER TETİKLEYİCİ
   setGameOver: () => set({ gameOver: true, gameState: 'gameover', speed: 0, targetSpeed: 0 })
 }));
 
@@ -162,9 +172,9 @@ function PlayerCar() {
   const { lane, enemies, coins, setGameOver, gameOver, triggerNearMiss, collectCoin, speed } = useGameStore();
   const group = useRef();
   const wheels = useRef([]);
+  
   const leftTarget = useRef();
   const rightTarget = useRef();
-
   if (!leftTarget.current) { leftTarget.current = new THREE.Object3D(); leftTarget.current.position.set(-0.5, -0.5, -100); }
   if (!rightTarget.current) { rightTarget.current = new THREE.Object3D(); rightTarget.current.position.set(0.5, -0.5, -100); }
 
@@ -172,6 +182,7 @@ function PlayerCar() {
 
   useFrame((state, delta) => {
     if (gameOver) return;
+    
     group.current.position.x = THREE.MathUtils.lerp(group.current.position.x, targetX, delta * 10);
     const tilt = (group.current.position.x - targetX) * 0.15;
     group.current.rotation.z = tilt; 
@@ -191,7 +202,7 @@ function PlayerCar() {
     coins.forEach(coin => {
         const dx = Math.abs(group.current.position.x - coin.x);
         const dz = Math.abs(coin.z - (-2));
-        if (dz < 2.5 && dx < 2.0) collectCoin(coin.id); // Toplama alanı biraz genişletildi
+        if (dz < 2.5 && dx < 2.0) collectCoin(coin.id);
     });
   });
 
@@ -229,40 +240,28 @@ function PlayerCar() {
   );
 }
 
-// --- 4. DÖNEN ALTINLAR (DÜZELTİLDİ) ---
+// --- 4. DÖNEN ALTINLAR (TEK BİLEŞEN) ---
 function SingleCoin({ x, z }) {
-    const ref = useRef();
+    const group = useRef();
     useFrame((state, delta) => {
-        if (ref.current) {
-            // 360 derece dönme efekti (Y ekseninde)
-            ref.current.rotation.y += delta * 3;
-        }
+        if(group.current) group.current.rotation.y += delta * 3; // 360 Derece Dönme
     });
 
     return (
-        <group position={[x, 1, z]}>
-            {/* Coin grubun içinde, grup pozisyonu sabit, mesh dönüyor */}
-            <mesh ref={ref} rotation={[Math.PI / 2, 0, 0]}>
+        <group ref={group} position={[x, 1, z]}>
+            <mesh rotation={[Math.PI / 2, 0, 0]}>
                 <cylinderGeometry args={[0.6, 0.6, 0.1, 32]} />
-                <meshStandardMaterial 
-                    color="#FFD700" 
-                    metalness={0.8} 
-                    roughness={0.2} 
-                    emissive="#FFD700" 
-                    emissiveIntensity={0.4} 
-                />
+                <meshStandardMaterial color="#FFD700" metalness={0.8} roughness={0.2} emissive="#FFD700" emissiveIntensity={0.4} />
             </mesh>
         </group>
-    );
+    )
 }
 
 function Coins() {
     const coins = useGameStore(state => state.coins);
     return (
         <>
-            {coins.map(coin => (
-                <SingleCoin key={coin.id} x={coin.x} z={coin.z} />
-            ))}
+            {coins.map(coin => <SingleCoin key={coin.id} x={coin.x} z={coin.z} />)}
         </>
     )
 }
@@ -472,6 +471,7 @@ function SpeedLines() {
   );
 }
 
+// --- GÖKYÜZÜ ---
 function SkyEnvironment() {
   return (
     <group>
@@ -483,30 +483,8 @@ function SkyEnvironment() {
 }
 
 export default function App() {
-  const { speed, score, combo, message, gameOver, gameState, countdown, startGame, accelerate, decelerate, changeLane, setCountdown, setGameState, setGameSpeed } = useGameStore();
+  const { speed, score, combo, message, gameOver, gameState, countdown, startGame, accelerate, decelerate, changeLane } = useGameStore();
   
-  useEffect(() => {
-    // Countdown sayacı
-    let interval;
-    if (gameState === 'countdown') {
-        let count = 5;
-        interval = setInterval(() => {
-            count--;
-            if (count > 0) {
-                setCountdown(count);
-            } else {
-                setCountdown("RACE!");
-                setTimeout(() => {
-                    setGameState('playing');
-                    setGameSpeed(20, 90);
-                }, 1000);
-                clearInterval(interval);
-            }
-        }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [gameState, setCountdown, setGameState, setGameSpeed]);
-
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'ArrowLeft') changeLane(-1);
@@ -556,9 +534,9 @@ export default function App() {
       {combo > 1 && <div style={{ position: 'absolute', top: 120, right: 30, fontSize: '40px', color: '#00ff00', fontWeight: 'bold', zIndex: 10, textShadow: '0 0 15px lime' }}>{combo}x COMBO</div>}
       {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: '#fff', fontSize: '80px', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: '0 0 20px cyan' }}>{message}</div>}
 
-      {/* GAME OVER - DÜZELTİLDİ */}
-      {gameOver && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(50,0,0,0.9)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Arial' }}>
+      {/* GAME OVER - ARTIK ÇALIŞIYOR */}
+      {gameState === 'gameover' && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Arial' }}>
           <h1 style={{ fontSize: '80px', color: '#ff0000', margin: '0 0 20px 0', textShadow: '0 0 30px red', textTransform: 'uppercase' }}>YOU HAD AN ACCIDENT</h1>
           <h2 style={{ color: '#fff', fontSize: '30px', marginBottom: '40px' }}>FINAL SCORE: {Math.floor(score)}</h2>
           <button onClick={startGame} style={{ padding: '20px 60px', fontSize: '24px', cursor: 'pointer', background: '#fff', color: '#000', border: 'none', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', boxShadow: '0 0 20px white' }}>RESTART THE RACE</button>
