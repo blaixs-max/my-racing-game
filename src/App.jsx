@@ -53,14 +53,12 @@ const useGameStore = create((set, get) => ({
     set({ gameState: 'menu', gameOver: false, score: 0, speed: 0 });
   },
   
-  // DİREKSİYON KONTROLÜ (GÜNCELLENDİ: Hassas Sürüş için küçük adımlar)
+  // DİREKSİYON KONTROLÜ (GÜNCELLENDİ: Orta seviye hassasiyet)
   steer: (direction) => set((state) => {
     if (state.gameState !== 'playing') return {};
-    // Adım boyutu 2.25'ten 0.15'e düşürüldü.
-    // Bu, milimetrik hassasiyetle manevra yapmayı sağlar.
-    const step = 0.15;
+    // Adım boyutu 1.25 yapıldı. Hem hassas hem de yeterince hızlı.
+    const step = 1.25;
     let newX = state.targetX + (direction * step);
-    // Yol sınırları
     if (newX > 5.0) newX = 5.0;
     if (newX < -5.0) newX = -5.0;
     return { targetX: newX };
@@ -73,7 +71,7 @@ const useGameStore = create((set, get) => ({
     set((state) => ({
       score: state.score + 100,
       coins: state.coins.filter(c => c.id !== id),
-      message: "+100 GOLD" // Mesaj içeriği "GOLD" içeriyor, rengi aşağıda ayarlanacak
+      message: "+100 GOLD"
     }));
     setTimeout(() => set({ message: "" }), 1000);
   },
@@ -146,6 +144,55 @@ const useGameStore = create((set, get) => ({
   setGameOver: () => set({ gameOver: true, gameState: 'gameover', speed: 0, targetSpeed: 0 })
 }));
 
+// --- YENİ BİLEŞEN: MOBİL DOKUNMATİK KONTROLLER ---
+function MobileControls() {
+  const { steer } = useGameStore();
+  // Basılı tutma işlemini yönetmek için bir interval referansı
+  const intervalRef = useRef(null);
+
+  // Hareketi başlat (Dokunma veya fare basma)
+  const startSteering = (direction) => {
+    if (intervalRef.current) return; // Zaten hareket ediyorsa tekrar başlatma
+    steer(direction); // İlk dokunuşta hemen bir adım git
+    // Basılı tutulduğu sürece her 50ms'de bir tetikle (Klavye tekrarı gibi)
+    intervalRef.current = setInterval(() => {
+      steer(direction);
+    }, 50);
+  };
+
+  // Hareketi durdur (Parmağı kaldırma veya fareyi bırakma)
+  const stopSteering = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  };
+
+  // Olay dinleyicilerini oluştur (Hem dokunmatik hem fare için)
+  const handlers = (direction) => ({
+    onTouchStart: (e) => { e.preventDefault(); startSteering(direction); }, // Sayfa kaydırmayı önle
+    onTouchEnd: (e) => { e.preventDefault(); stopSteering(); },
+    onMouseDown: () => startSteering(direction),
+    onMouseUp: stopSteering,
+    onMouseLeave: stopSteering, // Alanın dışına çıkarsa da durdur
+  });
+
+  return (
+    <>
+      {/* Sol Ekran Kontrol Alanı (Görünmez) */}
+      <div
+        style={{ position: 'absolute', top: 0, left: 0, width: '50%', height: '100%', zIndex: 40, /* background: 'rgba(255,0,0,0.2)' // Test için açılabilir */ }}
+        {...handlers(-1)}
+      />
+      {/* Sağ Ekran Kontrol Alanı (Görünmez) */}
+      <div
+        style={{ position: 'absolute', top: 0, right: 0, width: '50%', height: '100%', zIndex: 40, /* background: 'rgba(0,255,0,0.2)' // Test için açılabilir */ }}
+        {...handlers(1)}
+      />
+    </>
+  );
+}
+
 // --- 2. HIZ GÖSTERGESİ ---
 function Speedometer({ speed }) {
   const maxSpeed = 360;
@@ -177,7 +224,7 @@ function Speedometer({ speed }) {
   );
 }
 
-// --- 3. OYUNCU ARABASI (GÜNCELLENDİ: Hassas Çarpışma/Near Miss Kutuları) ---
+// --- 3. OYUNCU ARABASI ---
 function PlayerCar() {
   const { targetX, enemies, coins, setGameOver, gameOver, triggerNearMiss, collectCoin, speed } = useGameStore();
   const group = useRef();
@@ -200,30 +247,19 @@ function PlayerCar() {
 
     wheels.current.forEach(w => { if(w) w.rotation.x += speed * delta * 0.1; });
 
-    // ÇARPIŞMA VE NEAR MISS MANTIĞI
-    // Oyuncu aracı genişliği ~1.8m, Düşman ~2.0m.
-    // Merkezden merkeze temas mesafesi ~1.9m.
-
-    // 1. KAZA EŞİĞİ: Merkezler arası mesafe 1.8m'den azsa çarpışma (Biraz toleranslı)
     const crashThresholdX = 1.8; 
-    const crashThresholdZ = 3.5; // Boylamasına yakınlık
-
-    // 2. NEAR MISS EŞİĞİ: Araçlar arasında < 1.1m boşluk kalması isteniyor.
-    // Kaza eşiği (1.8m) + İstenen boşluk (1.1m) = 2.9m merkezden merkeze mesafe.
+    const crashThresholdZ = 3.5; 
     const nearMissThresholdX = 2.9; 
-    const nearMissThresholdZ = 5.0; // Boylamasına pencere
+    const nearMissThresholdZ = 5.0; 
 
     enemies.forEach(enemy => {
       const dx = Math.abs(group.current.position.x - enemy.x);
       const dz = Math.abs(enemy.z - (-2)); 
       
-      // KAZA KONTROLÜ
       if (dz < crashThresholdZ && dx < crashThresholdX) {
           setGameOver();
       }
       
-      // NEAR MISS KONTROLÜ (Kaza değilse AMA çok yakınsa)
-      // dx, kaza eşiğinden büyük EŞİT ama near miss eşiğinden KÜÇÜK olmalı.
       if (!enemy.passed && dz < nearMissThresholdZ && dx >= crashThresholdX && dx < nearMissThresholdX) {
         enemy.passed = true; 
         triggerNearMiss();   
@@ -342,7 +378,7 @@ function Traffic() {
   );
 }
 
-// --- 6. ÇEVRE (SOL/SAĞ BİNA SİMETRİSİ KORUNDU) ---
+// --- 6. ÇEVRE ---
 const Building = ({ width, height, side, type }) => {
     const isApartment = type === 'apartment';
     const buildingMat = new THREE.MeshStandardMaterial({ color: '#666', roughness: 0.9 });
@@ -355,7 +391,6 @@ const Building = ({ width, height, side, type }) => {
         for (let i = 1; i < floors; i++) {
              if (Math.random() > 0.6) {
                  const sign = Math.sign(side); 
-                 // Her iki taraf için de simetrik dışa taşma (1:1 aynı mantık)
                  w.push([0, i * 3, side * (width / 2) + sign * 0.1]); 
              }
         }
@@ -538,14 +573,24 @@ export default function App() {
     };
   }, []);
 
-  // Mesaj Rengi Belirleme (Dinamik)
+  // GÜNCELLENDİ: Mesaj Rengi ve Stili (Neon Cyan Geri Döndü)
   const isGoldMessage = message.includes("GOLD");
-  const messageColor = isGoldMessage ? '#FFD700' : '#ff0000'; // Altın sarısı veya Kırmızı
-  const messageShadow = isGoldMessage ? '0 0 30px #FFD700' : '0 0 30px red';
+  const messageColor = isGoldMessage ? '#00ffff' : '#ff0000'; // Neon Cyan veya Kırmızı
+  const messageShadow = isGoldMessage ? '0 0 20px #00ffff' : '0 0 30px red';
+
+  // GÜNCELLENDİ: Skor Rengi ve Stili (Neon Cyan)
+  const scoreStyle = {
+    color: '#00ffff',
+    textShadow: '0 0 20px #00ffff',
+    fontWeight: 'bold'
+  };
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a15', overflow: 'hidden' }}>
       
+      {/* MOBİL KONTROLLER (Sadece oyun sırasında aktif) */}
+      {gameState === 'playing' && <MobileControls />}
+
       {/* COUNTDOWN */}
       {gameState === 'countdown' && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
@@ -570,13 +615,14 @@ export default function App() {
           border: '2px solid #555', borderRadius: '10px', padding: '10px 30px',
           transform: 'skewX(-15deg)', zIndex: 10, color: '#fff', textAlign: 'right', boxShadow: '0 5px 15px rgba(0,0,0,0.5)'
       }}>
-        <div style={{ fontSize: '12px', color: '#00ff00', fontWeight: 'bold', transform: 'skewX(15deg)' }}>SCORE</div>
-        <div style={{ fontSize: '40px', fontWeight: 'bold', transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
+        {/* GÜNCELLENDİ: Skor Başlığı ve Değeri Neon Cyan Oldu */}
+        <div style={{ fontSize: '12px', ...scoreStyle, transform: 'skewX(15deg)' }}>SCORE</div>
+        <div style={{ fontSize: '40px', ...scoreStyle, transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
       </div>
 
       {combo > 1 && <div style={{ position: 'absolute', top: 120, right: 30, fontSize: '40px', color: '#00ff00', fontWeight: 'bold', zIndex: 10, textShadow: '0 0 15px lime' }}>{combo}x COMBO</div>}
       
-      {/* MESAJ ALANI (GÜNCELLENDİ: Dinamik Renk) */}
+      {/* MESAJ ALANI (GÜNCELLENDİ: Dinamik Renk/Gölge) */}
       {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: messageColor, fontSize: '80px', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: messageShadow, textTransform: 'uppercase', letterSpacing: '2px' }}>{message}</div>}
 
       {/* GAME OVER MENÜSÜ */}
