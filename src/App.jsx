@@ -509,11 +509,33 @@ function MobileControls() {
   return (
     <>
       <div
-        style={{ position: 'absolute', top: 0, left: 0, width: '50%', height: '100%', zIndex: 40, touchAction: 'none' }}
+        style={{ 
+          position: 'absolute', 
+          top: 0, 
+          left: 0, 
+          width: '50%', 
+          height: '100%', 
+          zIndex: 40, 
+          touchAction: 'none',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          WebkitTouchCallout: 'none'
+        }}
         {...handlers(-1)}
       />
       <div
-        style={{ position: 'absolute', top: 0, right: 0, width: '50%', height: '100%', zIndex: 40, touchAction: 'none' }}
+        style={{ 
+          position: 'absolute', 
+          top: 0, 
+          right: 0, 
+          width: '50%', 
+          height: '100%', 
+          zIndex: 40, 
+          touchAction: 'none',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          WebkitTouchCallout: 'none'
+        }}
         {...handlers(1)}
       />
       
@@ -541,6 +563,9 @@ function MobileControls() {
           boxShadow: '0 5px 20px rgba(255,69,0,0.9)',
           cursor: 'pointer',
           touchAction: 'none',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          WebkitTouchCallout: 'none',
           animation: 'pulseNitro 1.5s ease-in-out infinite'
         }}
       >
@@ -1075,7 +1100,30 @@ export default function App() {
   }
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#0a0a15', overflow: 'hidden' }}>
+    <div style={{ 
+      width: '100vw', 
+      height: '100vh', 
+      background: '#0a0a15', 
+      overflow: 'hidden',
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
+      WebkitTouchCallout: 'none',
+      touchAction: 'manipulation'
+    }}>
+      
+      <style>{`
+        * {
+          user-select: none !important;
+          -webkit-user-select: none !important;
+          -webkit-touch-callout: none !important;
+          -webkit-tap-highlight-color: transparent !important;
+        }
+        
+        body {
+          overscroll-behavior: none;
+          touch-action: manipulation;
+        }
+      `}</style>
       
       <GyroscopeHandler />
       
@@ -1088,24 +1136,24 @@ export default function App() {
       )}
 
       {gameState === 'menu' && (
-        <div style={{ position: 'absolute', zIndex: 60, inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)', gap: '20px' }}>
-          <h1 style={{ fontSize: '60px', color: '#00ffff', textShadow: '0 0 30px #00ffff', marginBottom: '20px' }}>HIGHWAY RACER</h1>
+        <div style={{ position: 'absolute', zIndex: 60, inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)', gap: '20px', userSelect: 'none', WebkitUserSelect: 'none' }}>
+          <h1 style={{ fontSize: '60px', color: '#00ffff', textShadow: '0 0 30px #00ffff', marginBottom: '20px', userSelect: 'none' }}>HIGHWAY RACER</h1>
           
-          <button onClick={handleStart} style={{ padding: '20px 60px', fontSize: '30px', background: '#00ff00', color:'#000', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #00ff00' }}>
+          <button onClick={handleStart} style={{ padding: '20px 60px', fontSize: '30px', background: '#00ff00', color:'#000', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #00ff00', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
             START RACE
           </button>
           
-          <button onClick={() => setShowGarage(!showGarage)} style={{ padding: '15px 40px', fontSize: '20px', background: '#ff00ff', color:'#fff', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #ff00ff' }}>
+          <button onClick={() => setShowGarage(!showGarage)} style={{ padding: '15px 40px', fontSize: '20px', background: '#ff00ff', color:'#fff', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #ff00ff', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
             {showGarage ? 'CLOSE GARAGE' : 'GARAGE & UPGRADES'}
           </button>
           
-          <button onClick={toggleGyroscope} style={{ padding: '10px 30px', fontSize: '16px', background: useGyroscope ? '#00ff00' : '#666', color:'#fff', border: 'none', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer' }}>
+          <button onClick={toggleGyroscope} style={{ padding: '10px 30px', fontSize: '16px', background: useGyroscope ? '#00ff00' : '#666', color:'#fff', border: 'none', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
             GYROSCOPE: {useGyroscope ? 'ON' : 'OFF'}
           </button>
           
           {showGarage && (
-            <div style={{ background: 'rgba(0,0,0,0.9)', padding: '30px', borderRadius: '20px', maxWidth: '800px', border: '2px solid #00ffff' }}>
-              <h2 style={{ color: '#00ffff', marginBottom: '20px' }}>SELECT CAR</h2>
+            <div style={{ background: 'rgba(0,0,0,0.9)', padding: '30px', borderRadius: '20px', maxWidth: '800px', border: '2px solid #00ffff', userSelect: 'none', WebkitUserSelect: 'none' }}>
+              <h2 style={{ color: '#00ffff', marginBottom: '20px', userSelect: 'none' }}>SELECT CAR</h2>
               <div style={{ display: 'flex', gap: '20px', marginBottom: '30px', flexWrap: 'wrap', justifyContent: 'center' }}>
                 {availableCars.map(car => (
                   <button 
@@ -1119,7 +1167,11 @@ export default function App() {
                       borderRadius: '10px',
                       cursor: 'pointer',
                       fontWeight: 'bold',
-                      textTransform: 'uppercase'
+                      textTransform: 'uppercase',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      WebkitTouchCallout: 'none',
+                      touchAction: 'manipulation'
                     }}
                   >
                     {car}
@@ -1127,13 +1179,13 @@ export default function App() {
                 ))}
               </div>
               
-              <h2 style={{ color: '#00ffff', marginBottom: '20px' }}>UPGRADES</h2>
+              <h2 style={{ color: '#00ffff', marginBottom: '20px', userSelect: 'none' }}>UPGRADES</h2>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 {['speed', 'control', 'durability'].map(stat => (
-                  <div key={stat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.1)', padding: '15px', borderRadius: '10px' }}>
+                  <div key={stat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.1)', padding: '15px', borderRadius: '10px', userSelect: 'none' }}>
                     <div>
-                      <span style={{ color: '#fff', textTransform: 'uppercase', fontWeight: 'bold' }}>{stat}</span>
-                      <span style={{ color: '#00ff00', marginLeft: '10px' }}>Level {upgrades[stat]}/5</span>
+                      <span style={{ color: '#fff', textTransform: 'uppercase', fontWeight: 'bold', userSelect: 'none' }}>{stat}</span>
+                      <span style={{ color: '#00ff00', marginLeft: '10px', userSelect: 'none' }}>Level {upgrades[stat]}/5</span>
                     </div>
                     <button 
                       onClick={() => upgradeStat(stat)}
@@ -1145,7 +1197,11 @@ export default function App() {
                         border: 'none',
                         borderRadius: '5px',
                         cursor: upgrades[stat] >= 5 ? 'not-allowed' : 'pointer',
-                        fontWeight: 'bold'
+                        fontWeight: 'bold',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        WebkitTouchCallout: 'none',
+                        touchAction: 'manipulation'
                       }}
                     >
                       {upgrades[stat] >= 5 ? 'MAX' : `UPGRADE (${upgrades[stat] * 1000})`}
@@ -1298,17 +1354,17 @@ export default function App() {
       {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: messageColor, fontSize: 'clamp(30px, 8vw, 80px)', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: messageShadow, textTransform: 'uppercase', letterSpacing: '2px', whiteSpace: 'nowrap' }}>{message}</div>}
 
       {gameOver && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(50,0,0,0.95)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Arial' }}>
-          <h1 style={{ fontSize: 'clamp(40px, 10vw, 80px)', color: '#ff0000', margin: '0 0 20px 0', textShadow: '0 0 30px red', textTransform: 'uppercase', textAlign: 'center' }}>YOU CRASHED</h1>
-          <h2 style={{ color: '#fff', fontSize: '30px', marginBottom: '20px' }}>FINAL SCORE: {Math.floor(score)}</h2>
-          <div style={{ color: '#00ffff', fontSize: '20px', marginBottom: '40px' }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(50,0,0,0.95)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Arial', userSelect: 'none', WebkitUserSelect: 'none' }}>
+          <h1 style={{ fontSize: 'clamp(40px, 10vw, 80px)', color: '#ff0000', margin: '0 0 20px 0', textShadow: '0 0 30px red', textTransform: 'uppercase', textAlign: 'center', userSelect: 'none' }}>YOU CRASHED</h1>
+          <h2 style={{ color: '#fff', fontSize: '30px', marginBottom: '20px', userSelect: 'none' }}>FINAL SCORE: {Math.floor(score)}</h2>
+          <div style={{ color: '#00ffff', fontSize: '20px', marginBottom: '40px', userSelect: 'none' }}>
             <div>Distance: {Math.floor(totalDistance)}m</div>
             <div>Near Misses: {nearMissCount}</div>
           </div>
           
           <div style={{ display: 'flex', gap: '20px' }}>
-            <button onClick={startGame} style={{ padding: '20px 40px', fontSize: '24px', cursor: 'pointer', background: '#fff', color: '#000', border: 'none', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', boxShadow: '0 0 20px white' }}>RESTART</button>
-            <button onClick={quitGame} style={{ padding: '20px 40px', fontSize: '24px', cursor: 'pointer', background: '#333', color: '#fff', border: '1px solid #666', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase' }}>QUIT</button>
+            <button onClick={startGame} style={{ padding: '20px 40px', fontSize: '24px', cursor: 'pointer', background: '#fff', color: '#000', border: 'none', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', boxShadow: '0 0 20px white', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>RESTART</button>
+            <button onClick={quitGame} style={{ padding: '20px 40px', fontSize: '24px', cursor: 'pointer', background: '#333', color: '#fff', border: '1px solid #666', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>QUIT</button>
           </div>
         </div>
       )}
