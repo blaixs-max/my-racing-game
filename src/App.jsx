@@ -139,13 +139,22 @@ const useGameStore = create((set, get) => ({
         set({ countdown: "GO!" });
       } else {
         clearInterval(timer);
-        set({ gameState: 'playing', countdown: null, speed: 60, targetSpeed: 60 });
+        set({ gameState: 'playing', countdown: null, speed: 110, targetSpeed: 110 });
       }
     }, 1000);
   },
 
   quitGame: () => {
-    set({ gameState: 'menu', gameOver: false, score: 0, speed: 0 });
+    set({ 
+      gameState: 'menu', 
+      gameOver: false, 
+      score: 0, 
+      speed: 0,
+      targetSpeed: 110,
+      currentX: 0,
+      targetX: 0,
+      cameraShake: 0
+    });
   },
   
   selectCar: (carType) => set({ selectedCar: carType }),
@@ -252,13 +261,13 @@ const useGameStore = create((set, get) => ({
 
     // Nitro sistemi
     let newNitro = state.nitro;
-    let newTargetSpeed = 60;
+    let newTargetSpeed = 110; // Nitrosuz max hız 110
     
     if (state.isNitroActive && state.nitro > 0) {
       // Nitro aktif - tüket ve hızlan
       newNitro = Math.max(0, state.nitro - delta * 25); // saniyede 25 birim tüketim
-      const speedBonus = state.upgrades.speed * 10;
-      newTargetSpeed = 130 + speedBonus;
+      const speedBonus = state.upgrades.speed * 5;
+      newTargetSpeed = 150 + speedBonus; // Nitrolu max hız 150
       
       if (newNitro <= 0) {
         set({ isNitroActive: false });
@@ -266,7 +275,7 @@ const useGameStore = create((set, get) => ({
     } else {
       // Nitro pasif - yenile
       newNitro = Math.min(state.maxNitro, state.nitro + delta * state.nitroRegenRate);
-      newTargetSpeed = 60;
+      newTargetSpeed = 110; // Nitrosuz max hız 110
     }
 
     const newSpeed = THREE.MathUtils.lerp(state.speed, newTargetSpeed, delta * 2);
@@ -290,12 +299,25 @@ const useGameStore = create((set, get) => ({
     let newEnemies = state.enemies.map(e => {
       let updated = { ...e };
       
-      // Rastgele şerit değiştirme (oyuncudan bağımsız)
-      if (!e.isChanging && Math.random() < 0.008) {
-        const possibleLanes = [-1, 0, 1].filter(l => {
-          if (l === e.lane) return false;
-          
-          // Diğer araçlarla çarpışma kontrolü
+      // Daha az sık rastgele şerit değiştirme (0.008 -> 0.003)
+      if (!e.isChanging && Math.random() < 0.003) {
+        // Sadece yan şerite geçiş
+        const currentLane = e.lane;
+        let possibleLanes = [];
+        
+        // Sol şeritte (-1): sadece ortaya (0)
+        // Orta şeritte (0): sağa (1) veya sola (-1)
+        // Sağ şeritte (1): sadece ortaya (0)
+        if (currentLane === -1) {
+          possibleLanes = [0];
+        } else if (currentLane === 0) {
+          possibleLanes = [-1, 1];
+        } else if (currentLane === 1) {
+          possibleLanes = [0];
+        }
+        
+        // Güvenli şeritleri filtrele
+        const safeLanes = possibleLanes.filter(l => {
           const targetX = l * 4.5;
           const isSafe = !state.enemies.some(other => 
             other.id !== e.id && 
@@ -305,8 +327,8 @@ const useGameStore = create((set, get) => ({
           return isSafe;
         });
         
-        if (possibleLanes.length > 0) {
-          const newLane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
+        if (safeLanes.length > 0) {
+          const newLane = safeLanes[Math.floor(Math.random() * safeLanes.length)];
           updated.isChanging = true;
           updated.targetLane = newLane;
           updated.changeProgress = 0;
@@ -480,34 +502,48 @@ function MobileControls() {
         {...handlers(1)}
       />
       
-      {/* Nitro Butonu - Sağ altta Distance/Near Miss yanında */}
+      {/* Nitro Butonu - Near Miss'in altında */}
       <div
         onTouchStart={(e) => { e.preventDefault(); activateNitro(); }}
         onTouchEnd={(e) => { e.preventDefault(); deactivateNitro(); }}
         style={{
           position: 'fixed',
-          top: '260px',
+          top: '270px',
           right: '20px',
-          width: '80px',
-          height: '80px',
+          width: '90px',
+          height: '90px',
           borderRadius: '50%',
-          background: 'linear-gradient(135deg, #ff00ff 0%, #00ffff 100%)',
+          background: 'linear-gradient(135deg, #ff4500 0%, #ff6600 50%, #ff8c00 100%)',
           border: '4px solid #fff',
           zIndex: 50,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: '14px',
+          fontSize: '16px',
           color: '#fff',
           fontWeight: 'bold',
           textAlign: 'center',
-          boxShadow: '0 5px 20px rgba(255,0,255,0.8)',
+          boxShadow: '0 5px 20px rgba(255,69,0,0.9)',
           cursor: 'pointer',
-          touchAction: 'none'
+          touchAction: 'none',
+          animation: 'pulseNitro 1.5s ease-in-out infinite'
         }}
       >
-        NITRO<br/>🔥
+        🔥<br/>NITRO
       </div>
+      
+      <style>{`
+        @keyframes pulseNitro {
+          0%, 100% { 
+            transform: scale(1);
+            box-shadow: 0 5px 20px rgba(255,69,0,0.9);
+          }
+          50% { 
+            transform: scale(1.05);
+            box-shadow: 0 8px 30px rgba(255,69,0,1);
+          }
+        }
+      `}</style>
     </>
   );
 }
@@ -553,7 +589,7 @@ function GyroscopeHandler() {
 
 // --- HIZ GÖSTERGESİ ---
 function Speedometer({ speed }) {
-  const maxSpeed = 180;
+  const maxSpeed = 200;
   const angle = -135 + (speed / maxSpeed) * 270;
   const renderMarks = () => {
     const marks = [];
@@ -584,7 +620,7 @@ function Speedometer({ speed }) {
 
 // --- OYUNCU ARABASI (GELİŞTİRİLMİŞ) ---
 function PlayerCar() {
-  const { targetX, enemies, coins, setGameOver, gameOver, triggerNearMiss, collectCoin, speed, selectedCar, upgrades } = useGameStore();
+  const { targetX, enemies, coins, setGameOver, gameOver, triggerNearMiss, collectCoin, speed, selectedCar, upgrades, gameState } = useGameStore();
   const group = useRef();
   const wheels = useRef([]);
   const leftTarget = useRef();
@@ -593,8 +629,16 @@ function PlayerCar() {
   if (!leftTarget.current) { leftTarget.current = new THREE.Object3D(); leftTarget.current.position.set(-0.5, -0.5, -100); }
   if (!rightTarget.current) { rightTarget.current = new THREE.Object3D(); rightTarget.current.position.set(0.5, -0.5, -100); }
 
+  // Restart sonrası pozisyon ve rotasyon sıfırlama
+  useEffect(() => {
+    if (group.current && gameState === 'playing') {
+      group.current.position.set(0, 0.1, -2);
+      group.current.rotation.set(0, 0, 0);
+    }
+  }, [gameState]);
+
   useFrame((state, delta) => {
-    if (gameOver) return;
+    if (gameOver || !group.current) return;
     
     const currentX = group.current.position.x;
     const lerpSpeed = 5 + (upgrades.control * 1);
@@ -946,13 +990,26 @@ function SpeedLines() {
 
 // --- KAMERA SHAKE ---
 function CameraShake() {
-  const { cameraShake } = useGameStore();
+  const { cameraShake, gameState } = useGameStore();
   const { camera } = useThree();
+  const originalPosition = useRef({ x: 0, y: 6, z: 14 });
+  
+  // Restart sonrası kamera pozisyonunu sıfırla
+  useEffect(() => {
+    if (gameState === 'playing') {
+      camera.position.set(0, 6, 14);
+      camera.rotation.set(0, 0, 0);
+    }
+  }, [gameState, camera]);
   
   useFrame(() => {
     if (cameraShake > 0) {
-      camera.position.x += (Math.random() - 0.5) * cameraShake * 0.5;
-      camera.position.y += (Math.random() - 0.5) * cameraShake * 0.5;
+      camera.position.x = originalPosition.current.x + (Math.random() - 0.5) * cameraShake * 0.5;
+      camera.position.y = originalPosition.current.y + (Math.random() - 0.5) * cameraShake * 0.5;
+    } else {
+      // Shake yoksa orijinal pozisyona dön
+      camera.position.x = THREE.MathUtils.lerp(camera.position.x, originalPosition.current.x, 0.1);
+      camera.position.y = THREE.MathUtils.lerp(camera.position.y, originalPosition.current.y, 0.1);
     }
   });
   
@@ -1109,7 +1166,7 @@ export default function App() {
       </div>
       
       <div style={{ 
-        position: 'fixed', // fixed yaparak hareket etmesini engelle
+        position: 'fixed',
         top: 20, 
         right: 20, 
         background: 'linear-gradient(135deg, #333 0%, #000 100%)',
@@ -1126,15 +1183,12 @@ export default function App() {
         <div style={{ fontSize: '40px', ...scoreStyle, transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
       </div>
 
-      {/* DISTANCE & NEAR MISS - HAVALI TASARIM */}
+      {/* DISTANCE - HAVALI TASARIM */}
       {gameState === 'playing' && (
         <div style={{ 
           position: 'fixed',
           top: 120, 
           right: 20, 
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '10px',
           zIndex: 10
         }}>
           <div style={{ 
@@ -1150,7 +1204,17 @@ export default function App() {
               <div style={{ fontSize: '24px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #00ffff' }}>{Math.floor(totalDistance)}m</div>
             </div>
           </div>
-          
+        </div>
+      )}
+      
+      {/* NEAR MISS - DISTANCE ALTINDA */}
+      {gameState === 'playing' && (
+        <div style={{ 
+          position: 'fixed',
+          top: 190, 
+          right: 20, 
+          zIndex: 10
+        }}>
           <div style={{ 
             background: 'linear-gradient(135deg, #2e1a1a 0%, #1a0f0f 100%)',
             border: '2px solid #ff00ff', 
@@ -1167,7 +1231,7 @@ export default function App() {
         </div>
       )}
 
-      {/* NITRO BAR */}
+      {/* NITRO BAR - Sadece renk, %100'de ateş rengi */}
       {gameState === 'playing' && (
         <div style={{
           position: 'fixed',
@@ -1181,37 +1245,36 @@ export default function App() {
             width: '300px',
             height: '40px',
             background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
-            border: '3px solid #00ffff',
+            border: nitro >= 100 ? '3px solid #ff6600' : '3px solid #00ffff',
             borderRadius: '20px',
             padding: '5px',
-            boxShadow: '0 5px 20px rgba(0,255,255,0.5)',
+            boxShadow: nitro >= 100 
+              ? '0 5px 20px rgba(255,102,0,0.8), 0 0 30px rgba(255,69,0,0.6)' 
+              : '0 5px 20px rgba(0,255,255,0.5)',
             position: 'relative',
             overflow: 'hidden'
           }}>
             <div style={{
               width: `${(nitro / maxNitro) * 100}%`,
               height: '100%',
-              background: isNitroActive 
-                ? 'linear-gradient(90deg, #ff00ff 0%, #00ffff 100%)'
-                : 'linear-gradient(90deg, #00ffff 0%, #0088ff 100%)',
+              background: nitro >= 100
+                ? 'linear-gradient(90deg, #ff4500 0%, #ff6600 50%, #ff8c00 100%)' // Ateş rengi
+                : isNitroActive 
+                  ? 'linear-gradient(90deg, #0088ff 0%, #00ffff 100%)'
+                  : 'linear-gradient(90deg, #00ffff 0%, #0088ff 100%)',
               borderRadius: '15px',
-              transition: 'width 0.1s ease-out',
-              boxShadow: isNitroActive ? '0 0 20px #ff00ff' : '0 0 10px #00ffff',
-              animation: isNitroActive ? 'nitroFlash 0.3s ease-in-out infinite' : 'none'
+              transition: 'width 0.1s ease-out, background 0.3s ease',
+              boxShadow: nitro >= 100
+                ? '0 0 30px rgba(255,102,0,1), inset 0 0 20px rgba(255,69,0,0.8)'
+                : isNitroActive 
+                  ? '0 0 20px #00ffff' 
+                  : '0 0 10px #00ffff',
+              animation: nitro >= 100 
+                ? 'fireGlow 0.5s ease-in-out infinite' 
+                : isNitroActive 
+                  ? 'nitroFlash 0.3s ease-in-out infinite' 
+                  : 'none'
             }} />
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              fontSize: '16px',
-              fontWeight: 'bold',
-              color: '#fff',
-              textShadow: '0 0 10px #000',
-              pointerEvents: 'none'
-            }}>
-              NITRO {Math.floor(nitro)}%
-            </div>
           </div>
         </div>
       )}
@@ -1220,6 +1283,16 @@ export default function App() {
         @keyframes nitroFlash {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.7; }
+        }
+        @keyframes fireGlow {
+          0%, 100% { 
+            filter: brightness(1.2);
+            box-shadow: 0 0 30px rgba(255,102,0,1), inset 0 0 20px rgba(255,69,0,0.8);
+          }
+          50% { 
+            filter: brightness(1.5);
+            box-shadow: 0 0 50px rgba(255,69,0,1), inset 0 0 30px rgba(255,140,0,1);
+          }
         }
       `}</style>
 
