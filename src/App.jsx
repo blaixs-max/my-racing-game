@@ -106,6 +106,9 @@ const useGameStore = create((set, get) => ({
   currentRoadType: 'straight',
   roadTransition: 0,
   
+  // Update optimizasyonu
+  updateCounter: 0,
+  
   startGame: () => {
     audioSystem.init();
     set({ 
@@ -127,7 +130,8 @@ const useGameStore = create((set, get) => ({
       roadSegments: [],
       currentRoadType: 'straight',
       nitro: 100,
-      isNitroActive: false
+      isNitroActive: false,
+      updateCounter: 0
     });
 
     let count = 3;
@@ -210,9 +214,9 @@ const useGameStore = create((set, get) => ({
     const { combo, score, nearMissCount } = get();
     audioSystem.playNearMiss();
     
-    // Spark partikül efektleri
+    // Spark partikül efektleri - 5'e düşürüldü (performans)
     const newParticles = [];
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 5; i++) {
       newParticles.push({
         id: Math.random(),
         type: 'spark',
@@ -239,7 +243,7 @@ const useGameStore = create((set, get) => ({
 
   addExplosion: (x, y, z) => {
     const newParticles = [];
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 20; i++) { // 50'den 20'ye düşürüldü (performans)
       newParticles.push({
         id: Math.random(),
         type: 'explosion',
@@ -258,6 +262,9 @@ const useGameStore = create((set, get) => ({
 
   updateGame: (delta) => set((state) => {
     if (state.gameState !== 'playing') return { speed: 0 };
+
+    // Update counter için
+    const newUpdateCounter = (state.updateCounter || 0) + 1;
 
     // Nitro sistemi
     let newNitro = state.nitro;
@@ -285,73 +292,82 @@ const useGameStore = create((set, get) => ({
     // Kamera shake azaltma
     const newShake = Math.max(0, state.cameraShake - delta * 5);
 
-    // Partikül güncelleme
+    // Partikül güncelleme - daha hızlı yok olma (performans)
     let newParticles = state.particles.map(p => ({
       ...p,
       x: p.x + p.vx * delta,
       y: p.y + p.vy * delta - 9.8 * delta,
       z: p.z + p.vz * delta,
       vy: p.vy - 9.8 * delta,
-      life: p.life - delta * 2
+      life: p.life - delta * 3 // 2'den 3'e çıkarıldı - daha hızlı yok olma
     })).filter(p => p.life > 0);
 
-    // Düşman AI ve güncelleme
-    let newEnemies = state.enemies.map(e => {
-      let updated = { ...e };
-      
-      // Daha az sık rastgele şerit değiştirme (0.008 -> 0.003)
-      if (!e.isChanging && Math.random() < 0.003) {
-        // Sadece yan şerite geçiş
-        const currentLane = e.lane;
-        let possibleLanes = [];
+    // Düşman AI ve güncelleme - HER 2 FRAME'DE BİR (performans)
+    let newEnemies = state.enemies;
+    if (newUpdateCounter % 2 === 0) {
+      newEnemies = state.enemies.map(e => {
+        let updated = { ...e };
         
-        // Sol şeritte (-1): sadece ortaya (0)
-        // Orta şeritte (0): sağa (1) veya sola (-1)
-        // Sağ şeritte (1): sadece ortaya (0)
-        if (currentLane === -1) {
-          possibleLanes = [0];
-        } else if (currentLane === 0) {
-          possibleLanes = [-1, 1];
-        } else if (currentLane === 1) {
-          possibleLanes = [0];
+        // Daha az sık rastgele şerit değiştirme (0.008 -> 0.003)
+        if (!e.isChanging && Math.random() < 0.003) {
+          // Sadece yan şerite geçiş
+          const currentLane = e.lane;
+          let possibleLanes = [];
+          
+          // Sol şeritte (-1): sadece ortaya (0)
+          // Orta şeritte (0): sağa (1) veya sola (-1)
+          // Sağ şeritte (1): sadece ortaya (0)
+          if (currentLane === -1) {
+            possibleLanes = [0];
+          } else if (currentLane === 0) {
+            possibleLanes = [-1, 1];
+          } else if (currentLane === 1) {
+            possibleLanes = [0];
+          }
+          
+          // Güvenli şeritleri filtrele
+          const safeLanes = possibleLanes.filter(l => {
+            const targetX = l * 4.5;
+            const isSafe = !state.enemies.some(other => 
+              other.id !== e.id && 
+              Math.abs(other.x - targetX) < 3 && 
+              Math.abs(other.z - e.z) < 25
+            );
+            return isSafe;
+          });
+          
+          if (safeLanes.length > 0) {
+            const newLane = safeLanes[Math.floor(Math.random() * safeLanes.length)];
+            updated.isChanging = true;
+            updated.targetLane = newLane;
+            updated.changeProgress = 0;
+          }
         }
         
-        // Güvenli şeritleri filtrele
-        const safeLanes = possibleLanes.filter(l => {
-          const targetX = l * 4.5;
-          const isSafe = !state.enemies.some(other => 
-            other.id !== e.id && 
-            Math.abs(other.x - targetX) < 3 && 
-            Math.abs(other.z - e.z) < 25
-          );
-          return isSafe;
-        });
-        
-        if (safeLanes.length > 0) {
-          const newLane = safeLanes[Math.floor(Math.random() * safeLanes.length)];
-          updated.isChanging = true;
-          updated.targetLane = newLane;
-          updated.changeProgress = 0;
+        if (updated.isChanging) {
+          updated.changeProgress += delta * 2;
+          const startX = updated.lane * 4.5;
+          const endX = updated.targetLane * 4.5;
+          updated.x = THREE.MathUtils.lerp(startX, endX, Math.min(updated.changeProgress, 1));
+          
+          if (updated.changeProgress >= 1) {
+            updated.isChanging = false;
+            updated.lane = updated.targetLane;
+            updated.x = updated.targetLane * 4.5;
+          }
         }
-      }
-      
-      if (updated.isChanging) {
-        updated.changeProgress += delta * 2;
-        const startX = updated.lane * 4.5;
-        const endX = updated.targetLane * 4.5;
-        updated.x = THREE.MathUtils.lerp(startX, endX, Math.min(updated.changeProgress, 1));
         
-        if (updated.changeProgress >= 1) {
-          updated.isChanging = false;
-          updated.lane = updated.targetLane;
-          updated.x = updated.targetLane * 4.5;
-        }
-      }
-      
-      updated.z = e.z + (newSpeed - e.ownSpeed * 0.5) * delta * 0.5;
-      
-      return updated;
-    }).filter(e => e.z < 50);
+        updated.z = e.z + (newSpeed - e.ownSpeed * 0.5) * delta * 0.5;
+        
+        return updated;
+      }).filter(e => e.z < 50);
+    } else {
+      // Sadece pozisyon güncelle
+      newEnemies = state.enemies.map(e => ({
+        ...e,
+        z: e.z + (newSpeed - e.ownSpeed * 0.5) * delta * 0.5
+      })).filter(e => e.z < 50);
+    }
 
     let newCoins = state.coins.map(c => ({
       ...c,
@@ -361,8 +377,8 @@ const useGameStore = create((set, get) => ({
     const difficulty = Math.min(state.score / 15000, 1.0);
     const spawnRate = 0.015 + (difficulty * 0.03);
 
-    // Geliştirilmiş spawn algoritması
-    if (Math.random() < spawnRate && newEnemies.length < 15) {
+    // Geliştirilmiş spawn algoritması - max 10 araç (performans)
+    if (Math.random() < spawnRate && newEnemies.length < 10) {
       const lanes = [-1, 0, 1];
       const availableLanes = lanes.filter(lane => {
         const laneX = lane * 4.5;
@@ -398,7 +414,7 @@ const useGameStore = create((set, get) => ({
       }
     }
 
-    if (Math.random() < 0.02 && newCoins.length < 5) {
+    if (Math.random() < 0.02 && newCoins.length < 3) { // 5'ten 3'e düşürüldü (performans)
       const coinLane = Math.floor(Math.random() * 3) - 1;
       const coinX = coinLane * 4.5;
       const isSafeCar = !newEnemies.some(e => Math.abs(e.x - coinX) < 2 && Math.abs(e.z - -400) < 40);
@@ -418,7 +434,8 @@ const useGameStore = create((set, get) => ({
       totalDistance: newDistance,
       cameraShake: newShake,
       nitro: newNitro,
-      targetSpeed: newTargetSpeed
+      targetSpeed: newTargetSpeed,
+      updateCounter: newUpdateCounter
     };
   }),
 
@@ -451,13 +468,11 @@ function ParticleSystem() {
         
         return (
           <mesh key={p.id} position={[p.x, p.y, p.z]}>
-            <sphereGeometry args={[size, 8, 8]} />
+            <sphereGeometry args={[size, 4, 4]} />
             <meshBasicMaterial 
               color={color} 
               transparent 
               opacity={p.life}
-              emissive={color}
-              emissiveIntensity={p.life * 2}
             />
           </mesh>
         );
@@ -693,9 +708,10 @@ function PlayerCar() {
     <group ref={group} position={[0, 0.1, -2]}>
       <primitive object={leftTarget.current} />
       <primitive object={rightTarget.current} />
-      <spotLight position={[0.8, 0.6, -1.5]} target={rightTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} castShadow />
-      <spotLight position={[-0.8, 0.6, -1.5]} target={leftTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} castShadow />
+      <spotLight position={[0.8, 0.6, -1.5]} target={rightTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} />
+      <spotLight position={[-0.8, 0.6, -1.5]} target={leftTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} />
       
+      {/* Shadow casting kaldırıldı - performans */}
       <mesh position={[0, 0.4, 0]} material={bodyMat}><boxGeometry args={[1.8, 0.5, 4.2]} /></mesh>
       <mesh position={[-0.95, 0.3, 1.2]} material={bodyMat}><boxGeometry args={[0.4, 0.4, 1.2]} /></mesh>
       <mesh position={[0.95, 0.3, 1.2]} material={bodyMat}><boxGeometry args={[0.4, 0.4, 1.2]} /></mesh>
@@ -771,7 +787,7 @@ function Traffic() {
           <group key={enemy.id} position={[x, 0, enemy.z]} rotation={[0, 0, tilt]}>
             {enemy.type === 'truck' && (
               <group>
-                <mesh position={[0, 2.0, 0]} material={materials.container} castShadow><boxGeometry args={[2.6, 3.2, 7.5]} /></mesh>
+                <mesh position={[0, 2.0, 0]} material={materials.container}><boxGeometry args={[2.6, 3.2, 7.5]} /></mesh>
                 <mesh position={[0, 1.2, -4.2]} material={materials.truck}><boxGeometry args={[2.6, 2.2, 2.0]} /></mesh>
                 <mesh position={[-1, 1.0, 3.8]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
                 <mesh position={[1, 1.0, 3.8]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
@@ -779,21 +795,21 @@ function Traffic() {
             )}
             {enemy.type === 'bus' && (
               <group>
-                <mesh position={[0, 2.0, 0]} material={materials.bus} castShadow><boxGeometry args={[2.7, 3.4, 10.0]} /></mesh>
+                <mesh position={[0, 2.0, 0]} material={materials.bus}><boxGeometry args={[2.7, 3.4, 10.0]} /></mesh>
                 <mesh position={[-1, 1.0, 5.1]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
                 <mesh position={[1, 1.0, 5.1]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
               </group>
             )}
             {enemy.type === 'sedan' && (
               <group>
-                <mesh position={[0, 0.7, 0]} material={materials.sedan} castShadow><boxGeometry args={[2.0, 0.8, 4.2]} /></mesh>
+                <mesh position={[0, 0.7, 0]} material={materials.sedan}><boxGeometry args={[2.0, 0.8, 4.2]} /></mesh>
                 <mesh position={[-0.8, 0.6, 2.2]} material={materials.tailLight}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
                 <mesh position={[0.8, 0.6, 2.2]} material={materials.tailLight}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
               </group>
             )}
             {enemy.type === 'police' && (
               <group>
-                <mesh position={[0, 0.7, 0]} material={materials.police} castShadow><boxGeometry args={[2.0, 0.8, 4.2]} /></mesh>
+                <mesh position={[0, 0.7, 0]} material={materials.police}><boxGeometry args={[2.0, 0.8, 4.2]} /></mesh>
                 <mesh position={[-0.8, 0.6, 2.2]} material={materials.tailLight}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
                 <mesh position={[0.8, 0.6, 2.2]} material={materials.tailLight}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
                 <mesh position={[0, 1.2, -0.5]} material={materials.policeLight}><boxGeometry args={[0.3, 0.2, 0.3]} /></mesh>
@@ -801,7 +817,7 @@ function Traffic() {
             )}
             {enemy.type === 'ambulance' && (
               <group>
-                <mesh position={[0, 1.5, 0]} material={materials.ambulance} castShadow><boxGeometry args={[2.2, 2.5, 5.0]} /></mesh>
+                <mesh position={[0, 1.5, 0]} material={materials.ambulance}><boxGeometry args={[2.2, 2.5, 5.0]} /></mesh>
                 <mesh position={[-0.9, 1.0, 2.6]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
                 <mesh position={[0.9, 1.0, 2.6]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
                 <mesh position={[0, 2.8, 0]} material={materials.ambulanceLight}><boxGeometry args={[0.4, 0.3, 0.4]} /></mesh>
@@ -809,7 +825,7 @@ function Traffic() {
             )}
             {enemy.type === 'sport' && (
               <group>
-                <mesh position={[0, 0.5, 0]} material={materials.sport} castShadow><boxGeometry args={[1.8, 0.6, 4.0]} /></mesh>
+                <mesh position={[0, 0.5, 0]} material={materials.sport}><boxGeometry args={[1.8, 0.6, 4.0]} /></mesh>
                 <mesh position={[0, 0.9, 0.5]} material={new THREE.MeshStandardMaterial({color:'#111'})}><boxGeometry args={[1.4, 0.4, 1.5]} /></mesh>
                 <mesh position={[-0.7, 0.5, 2.1]} material={materials.tailLight}><boxGeometry args={[0.3, 0.2, 0.1]} /></mesh>
                 <mesh position={[0.7, 0.5, 2.1]} material={materials.tailLight}><boxGeometry args={[0.3, 0.2, 0.1]} /></mesh>
@@ -833,7 +849,7 @@ const Building = ({ width, height, side, type }) => {
     const w = [];
     const floors = Math.floor(height / 3);
     for (let i = 1; i < floors; i++) {
-      if (Math.random() > 0.6) {
+      if (Math.random() > 0.75) { // 0.6'dan 0.75'e çıkarıldı - daha az pencere (performans)
         // Her iki taraf için de görünür pencereler
         const offsetDirection = side > 0 ? -1 : 1; // Sol taraf için sağa, sağ taraf için sola
         w.push([0, i * 3, offsetDirection * (width / 2 + 0.1)]); 
@@ -864,7 +880,7 @@ const Building = ({ width, height, side, type }) => {
 
 function SideObjects({ side }) {
   const { speed } = useGameStore();
-  const objects = useMemo(() => new Array(30).fill(0).map((_, i) => {
+  const objects = useMemo(() => new Array(15).fill(0).map((_, i) => { // 30'dan 15'e düşürüldü (performans)
     const rand = Math.random();
     let type = 'empty', height = 0, width = 0;
     if (rand > 0.8) { type = 'apartment'; height = 30 + Math.random() * 40; width = 12; }
@@ -968,25 +984,7 @@ function RoadEnvironment() {
   );
 }
 
-function SpeedLines() {
-  const { speed } = useGameStore();
-  const lines = useMemo(() => new Array(100).fill(0).map(() => ({ x: (Math.random() - 0.5) * 50, y: Math.random() * 15, z: (Math.random() - 0.5) * 200, len: Math.random() * 20 + 10 })), []);
-  const ref = useRef();
-  useFrame((state, delta) => {
-    if(ref.current) {
-      ref.current.children.forEach((line, i) => {
-        line.position.z += speed * delta * 0.9;
-        if (line.position.z > 20) line.position.z = -200; 
-      });
-    }
-  });
-  if (speed < 100) return null;
-  return (
-    <group ref={ref}>
-      {lines.map((l, i) => <mesh key={i} position={[l.x, l.y, l.z]}><boxGeometry args={[0.04, 0.04, l.len]} /><meshBasicMaterial color="white" transparent opacity={0.15} /></mesh>)}
-    </group>
-  );
-}
+// SpeedLines kaldırıldı - performans iyileştirmesi için
 
 // --- KAMERA SHAKE ---
 function CameraShake() {
@@ -1231,23 +1229,22 @@ export default function App() {
         </div>
       )}
 
-      {/* NITRO BAR - Sadece renk, %100'de ateş rengi */}
+      {/* NITRO BAR - Sağ altta */}
       {gameState === 'playing' && (
         <div style={{
           position: 'fixed',
           bottom: 30,
-          left: '50%',
-          transform: 'translateX(-50%)',
+          right: 20,
           zIndex: 10,
           pointerEvents: 'none'
         }}>
           <div style={{
-            width: '300px',
-            height: '40px',
+            width: '250px',
+            height: '35px',
             background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
             border: nitro >= 100 ? '3px solid #ff6600' : '3px solid #00ffff',
             borderRadius: '20px',
-            padding: '5px',
+            padding: '4px',
             boxShadow: nitro >= 100 
               ? '0 5px 20px rgba(255,102,0,0.8), 0 0 30px rgba(255,69,0,0.6)' 
               : '0 5px 20px rgba(0,255,255,0.5)',
@@ -1316,13 +1313,17 @@ export default function App() {
         </div>
       )}
 
-      <Canvas shadows>
+      <Canvas 
+        shadows={{ type: THREE.PCFSoftShadowMap, shadowMapSize: [512, 512] }}
+        dpr={[1, 1.5]} 
+        gl={{ antialias: false, powerPreference: "high-performance" }}
+        frameloop="always"
+      >
         <PerspectiveCamera makeDefault position={[0, 6, 14]} fov={55} />
         <ambientLight intensity={0.6} color="#ffffff" /> 
         <hemisphereLight skyColor="#445566" groundColor="#223344" intensity={0.6} />
         <Suspense fallback={null}>
           <SkyEnvironment />
-          <SpeedLines />
           <CameraShake />
           <ParticleSystem />
           <PlayerCar />
