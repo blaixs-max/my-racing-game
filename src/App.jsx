@@ -207,7 +207,7 @@ const useGameStore = create((set, get) => ({
       coins: state.coins.filter(c => c.id !== id),
       message: "+100 GOLD"
     }));
-    setTimeout(() => set({ message: "" }), 1000);
+    setTimeout(() => set({ message: "" }), 600); // 1000'den 600'e düşürüldü
   },
 
   triggerNearMiss: (position) => {
@@ -238,7 +238,7 @@ const useGameStore = create((set, get) => ({
       particles: [...state.particles, ...newParticles]
     }));
     
-    setTimeout(() => set({ message: "" }), 1000);
+    setTimeout(() => set({ message: "" }), 600); // 1000'den 600'e düşürüldü
   },
 
   addExplosion: (x, y, z) => {
@@ -501,9 +501,31 @@ function MobileControls() {
     }
   };
 
+  // Tüm olayları engelle
+  const preventAll = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    return false;
+  };
+
   const handlers = (direction) => ({
-    onTouchStart: (e) => { e.preventDefault(); startSteering(direction); },
-    onTouchEnd: (e) => { e.preventDefault(); stopSteering(); },
+    onTouchStart: (e) => { 
+      e.preventDefault(); 
+      e.stopPropagation();
+      startSteering(direction); 
+    },
+    onTouchEnd: (e) => { 
+      e.preventDefault(); 
+      e.stopPropagation();
+      stopSteering(); 
+    },
+    onTouchMove: (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    },
+    onContextMenu: preventAll,
+    onSelectStart: preventAll,
+    onDragStart: preventAll,
   });
 
   return (
@@ -519,7 +541,8 @@ function MobileControls() {
           touchAction: 'none',
           userSelect: 'none',
           WebkitUserSelect: 'none',
-          WebkitTouchCallout: 'none'
+          WebkitTouchCallout: 'none',
+          pointerEvents: 'auto'
         }}
         {...handlers(-1)}
       />
@@ -534,15 +557,20 @@ function MobileControls() {
           touchAction: 'none',
           userSelect: 'none',
           WebkitUserSelect: 'none',
-          WebkitTouchCallout: 'none'
+          WebkitTouchCallout: 'none',
+          pointerEvents: 'auto'
         }}
         {...handlers(1)}
       />
       
       {/* Nitro Butonu - Near Miss'in altında */}
       <div
-        onTouchStart={(e) => { e.preventDefault(); activateNitro(); }}
-        onTouchEnd={(e) => { e.preventDefault(); deactivateNitro(); }}
+        onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); activateNitro(); }}
+        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); deactivateNitro(); }}
+        onTouchMove={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        onContextMenu={preventAll}
+        onSelectStart={preventAll}
+        onDragStart={preventAll}
         style={{
           position: 'fixed',
           top: '270px',
@@ -566,7 +594,8 @@ function MobileControls() {
           userSelect: 'none',
           WebkitUserSelect: 'none',
           WebkitTouchCallout: 'none',
-          animation: 'pulseNitro 1.5s ease-in-out infinite'
+          animation: 'pulseNitro 1.5s ease-in-out infinite',
+          pointerEvents: 'auto'
         }}
       >
         🔥<br/>NITRO
@@ -1071,11 +1100,30 @@ export default function App() {
     const handleKeyUp = (e) => { 
       if (e.key === ' ') deactivateNitro();
     };
+    
+    // Tüm input olaylarını engelle (tablet uyarıları için)
+    const preventDefaults = (e) => {
+      if (e.target.tagName !== 'BUTTON') {
+        e.preventDefault();
+      }
+    };
+    
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('contextmenu', preventDefaults);
+    window.addEventListener('selectstart', preventDefaults);
+    window.addEventListener('gesturestart', preventDefaults);
+    window.addEventListener('gesturechange', preventDefaults);
+    window.addEventListener('gestureend', preventDefaults);
+    
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('contextmenu', preventDefaults);
+      window.removeEventListener('selectstart', preventDefaults);
+      window.removeEventListener('gesturestart', preventDefaults);
+      window.removeEventListener('gesturechange', preventDefaults);
+      window.removeEventListener('gestureend', preventDefaults);
     };
   }, [gameState]);
 
@@ -1119,9 +1167,26 @@ export default function App() {
           -webkit-tap-highlight-color: transparent !important;
         }
         
-        body {
+        body, html {
           overscroll-behavior: none;
           touch-action: manipulation;
+          overflow: hidden;
+          position: fixed;
+          width: 100%;
+          height: 100%;
+        }
+        
+        input, textarea {
+          display: none !important;
+        }
+        
+        /* Tablet/mobil klavye engellemeleri */
+        ::selection {
+          background: transparent !important;
+        }
+        
+        ::-moz-selection {
+          background: transparent !important;
         }
       `}</style>
       
@@ -1349,7 +1414,7 @@ export default function App() {
         }
       `}</style>
 
-      {combo > 1 && <div style={{ position: 'absolute', top: 260, right: 30, fontSize: '40px', color: '#00ff00', fontWeight: 'bold', zIndex: 10, textShadow: '0 0 15px lime' }}>{combo}x COMBO</div>}
+      {combo > 1 && <div style={{ position: 'absolute', top: 100, left: 30, fontSize: '40px', color: '#00ff00', fontWeight: 'bold', zIndex: 10, textShadow: '0 0 15px lime', userSelect: 'none', WebkitUserSelect: 'none', pointerEvents: 'none' }}>{combo}x COMBO</div>}
       
       {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: messageColor, fontSize: 'clamp(30px, 8vw, 80px)', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: messageShadow, textTransform: 'uppercase', letterSpacing: '2px', whiteSpace: 'nowrap' }}>{message}</div>}
 
