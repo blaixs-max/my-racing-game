@@ -15,39 +15,10 @@ class AudioSystem {
     if (this.initialized) return;
     try {
       this.context = new (window.AudioContext || window.webkitAudioContext)();
-      
-      // Arka plan müziği (basit melodi)
-      this.startBackgroundMusic();
-      
       this.initialized = true;
     } catch (e) {
       console.log('Audio not supported');
     }
-  }
-
-  startBackgroundMusic() {
-    if (!this.context) return;
-    const musicGain = this.context.createGain();
-    musicGain.gain.value = 0.05;
-    musicGain.connect(this.context.destination);
-    
-    const notes = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25];
-    let currentTime = this.context.currentTime;
-    
-    const playNote = () => {
-      const osc = this.context.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.value = notes[Math.floor(Math.random() * notes.length)];
-      osc.connect(musicGain);
-      osc.start(currentTime);
-      osc.stop(currentTime + 0.3);
-      currentTime += 0.5;
-      
-      if (currentTime < this.context.currentTime + 60) {
-        setTimeout(playNote, 400);
-      }
-    };
-    playNote();
   }
 
   playCrash() {
@@ -97,7 +68,7 @@ const useGameStore = create((set, get) => ({
   gameState: 'menu',
   countdown: 3,
   speed: 0,
-  targetSpeed: 20,
+  targetSpeed: 60,
   currentX: 0,
   targetX: 0,
   score: 0,
@@ -110,6 +81,12 @@ const useGameStore = create((set, get) => ({
   cameraShake: 0,
   totalDistance: 0,
   nearMissCount: 0,
+  
+  // Nitro sistemi
+  nitro: 100,
+  maxNitro: 100,
+  isNitroActive: false,
+  nitroRegenRate: 5, // saniyede 5 birim
   
   // Araç özelleştirme
   selectedCar: 'default',
@@ -148,7 +125,9 @@ const useGameStore = create((set, get) => ({
       totalDistance: 0,
       nearMissCount: 0,
       roadSegments: [],
-      currentRoadType: 'straight'
+      currentRoadType: 'straight',
+      nitro: 100,
+      isNitroActive: false
     });
 
     let count = 3;
@@ -160,7 +139,7 @@ const useGameStore = create((set, get) => ({
         set({ countdown: "GO!" });
       } else {
         clearInterval(timer);
-        set({ gameState: 'playing', countdown: null, speed: 20, targetSpeed: 60 });
+        set({ gameState: 'playing', countdown: null, speed: 60, targetSpeed: 60 });
       }
     }, 1000);
   },
@@ -202,13 +181,12 @@ const useGameStore = create((set, get) => ({
   
   toggleGyroscope: () => set((state) => ({ useGyroscope: !state.useGyroscope })),
   
-  accelerate: () => set((state) => {
-    if (state.gameState !== 'playing') return {};
-    const speedBonus = state.upgrades.speed * 10;
-    return { targetSpeed: 130 + speedBonus };
+  activateNitro: () => set((state) => {
+    if (state.gameState !== 'playing' || state.nitro <= 0) return {};
+    return { isNitroActive: true };
   }),
   
-  decelerate: () => set((state) => state.gameState === 'playing' && { targetSpeed: 60 }),
+  deactivateNitro: () => set({ isNitroActive: false }),
   
   collectCoin: (id) => {
     set((state) => ({
@@ -272,7 +250,26 @@ const useGameStore = create((set, get) => ({
   updateGame: (delta) => set((state) => {
     if (state.gameState !== 'playing') return { speed: 0 };
 
-    const newSpeed = THREE.MathUtils.lerp(state.speed, state.targetSpeed, delta * 2);
+    // Nitro sistemi
+    let newNitro = state.nitro;
+    let newTargetSpeed = 60;
+    
+    if (state.isNitroActive && state.nitro > 0) {
+      // Nitro aktif - tüket ve hızlan
+      newNitro = Math.max(0, state.nitro - delta * 25); // saniyede 25 birim tüketim
+      const speedBonus = state.upgrades.speed * 10;
+      newTargetSpeed = 130 + speedBonus;
+      
+      if (newNitro <= 0) {
+        set({ isNitroActive: false });
+      }
+    } else {
+      // Nitro pasif - yenile
+      newNitro = Math.min(state.maxNitro, state.nitro + delta * state.nitroRegenRate);
+      newTargetSpeed = 60;
+    }
+
+    const newSpeed = THREE.MathUtils.lerp(state.speed, newTargetSpeed, delta * 2);
     const newScore = state.score + (newSpeed * delta * 0.2);
     const newDistance = state.totalDistance + (newSpeed * delta * 0.1);
 
@@ -293,35 +290,26 @@ const useGameStore = create((set, get) => ({
     let newEnemies = state.enemies.map(e => {
       let updated = { ...e };
       
-      // Oyuncuya tepki - oyuncu yaklaşınca kaçış şeridi seç
-      const playerZ = -2;
-      const distanceToPlayer = Math.abs(e.z - playerZ);
-      const isPlayerClose = distanceToPlayer < 30 && distanceToPlayer > 5;
-      
-      if (!e.isChanging && isPlayerClose) {
-        const playerX = state.targetX;
-        const enemyLane = e.lane;
-        
-        // Oyuncu aynı şeritteyse yan şeride kaç
-        if (Math.abs(playerX - (enemyLane * 4.5)) < 3) {
-          const possibleLanes = [-1, 0, 1].filter(l => {
-            if (l === enemyLane) return false;
-            // Diğer araçlarla çarpışma kontrolü
-            const targetX = l * 4.5;
-            const isSafe = !state.enemies.some(other => 
-              other.id !== e.id && 
-              Math.abs(other.x - targetX) < 3 && 
-              Math.abs(other.z - e.z) < 20
-            );
-            return isSafe;
-          });
+      // Rastgele şerit değiştirme (oyuncudan bağımsız)
+      if (!e.isChanging && Math.random() < 0.008) {
+        const possibleLanes = [-1, 0, 1].filter(l => {
+          if (l === e.lane) return false;
           
-          if (possibleLanes.length > 0) {
-            const newLane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
-            updated.isChanging = true;
-            updated.targetLane = newLane;
-            updated.changeProgress = 0;
-          }
+          // Diğer araçlarla çarpışma kontrolü
+          const targetX = l * 4.5;
+          const isSafe = !state.enemies.some(other => 
+            other.id !== e.id && 
+            Math.abs(other.x - targetX) < 3 && 
+            Math.abs(other.z - e.z) < 25
+          );
+          return isSafe;
+        });
+        
+        if (possibleLanes.length > 0) {
+          const newLane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
+          updated.isChanging = true;
+          updated.targetLane = newLane;
+          updated.changeProgress = 0;
         }
       }
       
@@ -406,7 +394,9 @@ const useGameStore = create((set, get) => ({
       coins: newCoins,
       particles: newParticles,
       totalDistance: newDistance,
-      cameraShake: newShake
+      cameraShake: newShake,
+      nitro: newNitro,
+      targetSpeed: newTargetSpeed
     };
   }),
 
@@ -456,7 +446,7 @@ function ParticleSystem() {
 
 // --- MOBİL KONTROLLER ---
 function MobileControls() {
-  const { steer } = useGameStore();
+  const { steer, activateNitro, deactivateNitro } = useGameStore();
   const intervalRef = useRef(null);
 
   const startSteering = (direction) => {
@@ -489,6 +479,35 @@ function MobileControls() {
         style={{ position: 'absolute', top: 0, right: 0, width: '50%', height: '100%', zIndex: 40, touchAction: 'none' }}
         {...handlers(1)}
       />
+      
+      {/* Nitro Butonu - Sağ altta Distance/Near Miss yanında */}
+      <div
+        onTouchStart={(e) => { e.preventDefault(); activateNitro(); }}
+        onTouchEnd={(e) => { e.preventDefault(); deactivateNitro(); }}
+        style={{
+          position: 'fixed',
+          top: '260px',
+          right: '20px',
+          width: '80px',
+          height: '80px',
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, #ff00ff 0%, #00ffff 100%)',
+          border: '4px solid #fff',
+          zIndex: 50,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '14px',
+          color: '#fff',
+          fontWeight: 'bold',
+          textAlign: 'center',
+          boxShadow: '0 5px 20px rgba(255,0,255,0.8)',
+          cursor: 'pointer',
+          touchAction: 'none'
+        }}
+      >
+        NITRO<br/>🔥
+      </div>
     </>
   );
 }
@@ -771,8 +790,9 @@ const Building = ({ width, height, side, type }) => {
     const floors = Math.floor(height / 3);
     for (let i = 1; i < floors; i++) {
       if (Math.random() > 0.6) {
-        const sign = Math.sign(side); 
-        w.push([0, i * 3, side * (width / 2) + sign * 0.1]); 
+        // Her iki taraf için de görünür pencereler
+        const offsetDirection = side > 0 ? -1 : 1; // Sol taraf için sağa, sağ taraf için sola
+        w.push([0, i * 3, offsetDirection * (width / 2 + 0.1)]); 
       }
     }
     return w;
@@ -784,7 +804,7 @@ const Building = ({ width, height, side, type }) => {
         <boxGeometry args={[width, height, width]} />
       </mesh>
       {wins.map((pos, i) => (
-        <mesh key={i} position={pos} material={winLitMat}>
+        <mesh key={i} position={pos} material={winLitMat} rotation={[0, side > 0 ? Math.PI / 2 : -Math.PI / 2, 0]}>
           <planeGeometry args={[width * 0.6, 1.5]} />
         </mesh>
       ))}
@@ -954,10 +974,10 @@ function SkyEnvironment() {
 export default function App() {
   const { 
     speed, score, combo, message, gameOver, gameState, countdown, 
-    startGame, quitGame, accelerate, decelerate, steer,
-    totalDistance, nearMissCount,
+    startGame, quitGame, steer,
+    totalDistance, nearMissCount, nitro, maxNitro, isNitroActive,
     selectedCar, selectCar, availableCars, upgrades, upgradeStat,
-    useGyroscope, toggleGyroscope
+    useGyroscope, toggleGyroscope, activateNitro, deactivateNitro
   } = useGameStore();
   
   const [showGarage, setShowGarage] = useState(false);
@@ -966,16 +986,18 @@ export default function App() {
     const handleKeyDown = (e) => {
       if (e.key === 'ArrowLeft') steer(-1);
       if (e.key === 'ArrowRight') steer(1);
-      if (e.key === 'ArrowUp') accelerate();
+      if (e.key === ' ' && gameState === 'playing') activateNitro();
     };
-    const handleKeyUp = (e) => { if (e.key === 'ArrowUp') decelerate(); };
+    const handleKeyUp = (e) => { 
+      if (e.key === ' ') deactivateNitro();
+    };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [gameState]);
 
   const isGoldMessage = message.includes("GOLD");
   const messageColor = isGoldMessage ? '#00ffff' : '#ff0000'; 
@@ -1081,28 +1103,125 @@ export default function App() {
         </div>
       )}
 
+      {/* HUD - SABİT SCORE */}
       <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 10, pointerEvents: 'none' }}>
         <Speedometer speed={speed} />
       </div>
       
       <div style={{ 
-        position: 'absolute', top: 20, right: 20, 
+        position: 'fixed', // fixed yaparak hareket etmesini engelle
+        top: 20, 
+        right: 20, 
         background: 'linear-gradient(135deg, #333 0%, #000 100%)',
-        border: '2px solid #555', borderRadius: '10px', padding: '10px 30px',
-        transform: 'skewX(-15deg)', zIndex: 10, color: '#fff', textAlign: 'right', boxShadow: '0 5px 15px rgba(0,0,0,0.5)'
+        border: '2px solid #555', 
+        borderRadius: '10px', 
+        padding: '10px 30px',
+        transform: 'skewX(-15deg)', 
+        zIndex: 10, 
+        color: '#fff', 
+        textAlign: 'right', 
+        boxShadow: '0 5px 15px rgba(0,0,0,0.5)'
       }}>
         <div style={{ fontSize: '12px', ...scoreStyle, transform: 'skewX(15deg)' }}>SCORE</div>
         <div style={{ fontSize: '40px', ...scoreStyle, transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
       </div>
 
+      {/* DISTANCE & NEAR MISS - HAVALI TASARIM */}
       {gameState === 'playing' && (
-        <>
-          <div style={{ position: 'absolute', top: 120, right: 30, background: 'rgba(0,0,0,0.7)', padding: '10px 20px', borderRadius: '10px', zIndex: 10, color: '#fff', fontSize: '16px' }}>
-            <div>Distance: {Math.floor(totalDistance)}m</div>
-            <div>Near Miss: {nearMissCount}</div>
+        <div style={{ 
+          position: 'fixed',
+          top: 120, 
+          right: 20, 
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+          zIndex: 10
+        }}>
+          <div style={{ 
+            background: 'linear-gradient(135deg, #1a1a2e 0%, #0f0f1a 100%)',
+            border: '2px solid #00ffff', 
+            borderRadius: '10px', 
+            padding: '8px 20px',
+            transform: 'skewX(-15deg)',
+            boxShadow: '0 5px 15px rgba(0,255,255,0.3)'
+          }}>
+            <div style={{ transform: 'skewX(15deg)', textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: '#00ffff', fontWeight: 'bold' }}>DISTANCE</div>
+              <div style={{ fontSize: '24px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #00ffff' }}>{Math.floor(totalDistance)}m</div>
+            </div>
           </div>
-        </>
+          
+          <div style={{ 
+            background: 'linear-gradient(135deg, #2e1a1a 0%, #1a0f0f 100%)',
+            border: '2px solid #ff00ff', 
+            borderRadius: '10px', 
+            padding: '8px 20px',
+            transform: 'skewX(-15deg)',
+            boxShadow: '0 5px 15px rgba(255,0,255,0.3)'
+          }}>
+            <div style={{ transform: 'skewX(15deg)', textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: '#ff00ff', fontWeight: 'bold' }}>NEAR MISS</div>
+              <div style={{ fontSize: '24px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #ff00ff' }}>{nearMissCount}</div>
+            </div>
+          </div>
+        </div>
       )}
+
+      {/* NITRO BAR */}
+      {gameState === 'playing' && (
+        <div style={{
+          position: 'fixed',
+          bottom: 30,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 10,
+          pointerEvents: 'none'
+        }}>
+          <div style={{
+            width: '300px',
+            height: '40px',
+            background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
+            border: '3px solid #00ffff',
+            borderRadius: '20px',
+            padding: '5px',
+            boxShadow: '0 5px 20px rgba(0,255,255,0.5)',
+            position: 'relative',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              width: `${(nitro / maxNitro) * 100}%`,
+              height: '100%',
+              background: isNitroActive 
+                ? 'linear-gradient(90deg, #ff00ff 0%, #00ffff 100%)'
+                : 'linear-gradient(90deg, #00ffff 0%, #0088ff 100%)',
+              borderRadius: '15px',
+              transition: 'width 0.1s ease-out',
+              boxShadow: isNitroActive ? '0 0 20px #ff00ff' : '0 0 10px #00ffff',
+              animation: isNitroActive ? 'nitroFlash 0.3s ease-in-out infinite' : 'none'
+            }} />
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              color: '#fff',
+              textShadow: '0 0 10px #000',
+              pointerEvents: 'none'
+            }}>
+              NITRO {Math.floor(nitro)}%
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes nitroFlash {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.7; }
+        }
+      `}</style>
 
       {combo > 1 && <div style={{ position: 'absolute', top: 260, right: 30, fontSize: '40px', color: '#00ff00', fontWeight: 'bold', zIndex: 10, textShadow: '0 0 15px lime' }}>{combo}x COMBO</div>}
       
