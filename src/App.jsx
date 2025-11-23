@@ -8,8 +8,6 @@ import { create } from 'zustand';
 class AudioSystem {
   constructor() {
     this.context = null;
-    this.engineOsc = null;
-    this.engineGain = null;
     this.initialized = false;
   }
 
@@ -17,16 +15,6 @@ class AudioSystem {
     if (this.initialized) return;
     try {
       this.context = new (window.AudioContext || window.webkitAudioContext)();
-      
-      // Motor sesi
-      this.engineOsc = this.context.createOscillator();
-      this.engineGain = this.context.createGain();
-      this.engineOsc.type = 'sawtooth';
-      this.engineOsc.frequency.value = 80;
-      this.engineOsc.connect(this.engineGain);
-      this.engineGain.connect(this.context.destination);
-      this.engineGain.gain.value = 0;
-      this.engineOsc.start();
       
       // Arka plan müziği (basit melodi)
       this.startBackgroundMusic();
@@ -60,14 +48,6 @@ class AudioSystem {
       }
     };
     playNote();
-  }
-
-  updateEngine(speed) {
-    if (!this.engineGain || !this.engineOsc) return;
-    const freq = 80 + (speed * 2);
-    const vol = Math.min(speed / 300, 0.3);
-    this.engineOsc.frequency.exponentialRampToValueAtTime(freq, this.context.currentTime + 0.1);
-    this.engineGain.gain.exponentialRampToValueAtTime(vol + 0.001, this.context.currentTime + 0.1);
   }
 
   playCrash() {
@@ -127,8 +107,6 @@ const useGameStore = create((set, get) => ({
   coins: [],
   particles: [],
   message: "",
-  slowMotion: false,
-  slowMotionCooldown: 0,
   cameraShake: 0,
   totalDistance: 0,
   nearMissCount: 0,
@@ -169,7 +147,6 @@ const useGameStore = create((set, get) => ({
       gameOver: false,
       totalDistance: 0,
       nearMissCount: 0,
-      slowMotionCooldown: 0,
       roadSegments: [],
       currentRoadType: 'straight'
     });
@@ -183,7 +160,7 @@ const useGameStore = create((set, get) => ({
         set({ countdown: "GO!" });
       } else {
         clearInterval(timer);
-        set({ gameState: 'playing', countdown: null, speed: 20, targetSpeed: 90 });
+        set({ gameState: 'playing', countdown: null, speed: 20, targetSpeed: 60 });
       }
     }, 1000);
   },
@@ -225,22 +202,13 @@ const useGameStore = create((set, get) => ({
   
   toggleGyroscope: () => set((state) => ({ useGyroscope: !state.useGyroscope })),
   
-  activateSlowMotion: () => set((state) => {
-    if (state.slowMotionCooldown <= 0 && state.gameState === 'playing') {
-      return { slowMotion: true, slowMotionCooldown: 10 };
-    }
-    return {};
-  }),
-  
-  deactivateSlowMotion: () => set({ slowMotion: false }),
-  
   accelerate: () => set((state) => {
     if (state.gameState !== 'playing') return {};
-    const speedBonus = state.upgrades.speed * 20;
-    return { targetSpeed: 380 + speedBonus };
+    const speedBonus = state.upgrades.speed * 10;
+    return { targetSpeed: 130 + speedBonus };
   }),
   
-  decelerate: () => set((state) => state.gameState === 'playing' && { targetSpeed: 90 }),
+  decelerate: () => set((state) => state.gameState === 'playing' && { targetSpeed: 60 }),
   
   collectCoin: (id) => {
     set((state) => ({
@@ -276,11 +244,10 @@ const useGameStore = create((set, get) => ({
       score: score + (500 * combo), 
       message: `NEAR MISS! ${combo}x`,
       nearMissCount: nearMissCount + 1,
-      particles: [...state.particles, ...newParticles],
-      slowMotion: true
+      particles: [...state.particles, ...newParticles]
     }));
     
-    setTimeout(() => set({ message: "", slowMotion: false }), 1000);
+    setTimeout(() => set({ message: "" }), 1000);
   },
 
   addExplosion: (x, y, z) => {
@@ -305,15 +272,9 @@ const useGameStore = create((set, get) => ({
   updateGame: (delta) => set((state) => {
     if (state.gameState !== 'playing') return { speed: 0 };
 
-    const timeScale = state.slowMotion ? 0.3 : 1.0;
-    const effectiveDelta = delta * timeScale;
-
-    const newSpeed = THREE.MathUtils.lerp(state.speed, state.targetSpeed, effectiveDelta * 2);
-    const newScore = state.score + (newSpeed * effectiveDelta * 0.2);
-    const newDistance = state.totalDistance + (newSpeed * effectiveDelta * 0.1);
-
-    // Cooldown güncelleme
-    const newCooldown = Math.max(0, state.slowMotionCooldown - delta);
+    const newSpeed = THREE.MathUtils.lerp(state.speed, state.targetSpeed, delta * 2);
+    const newScore = state.score + (newSpeed * delta * 0.2);
+    const newDistance = state.totalDistance + (newSpeed * delta * 0.1);
 
     // Kamera shake azaltma
     const newShake = Math.max(0, state.cameraShake - delta * 5);
@@ -321,30 +282,51 @@ const useGameStore = create((set, get) => ({
     // Partikül güncelleme
     let newParticles = state.particles.map(p => ({
       ...p,
-      x: p.x + p.vx * effectiveDelta,
-      y: p.y + p.vy * effectiveDelta - 9.8 * effectiveDelta,
-      z: p.z + p.vz * effectiveDelta,
-      vy: p.vy - 9.8 * effectiveDelta,
-      life: p.life - effectiveDelta * 2
+      x: p.x + p.vx * delta,
+      y: p.y + p.vy * delta - 9.8 * delta,
+      z: p.z + p.vz * delta,
+      vy: p.vy - 9.8 * delta,
+      life: p.life - delta * 2
     })).filter(p => p.life > 0);
 
     // Düşman AI ve güncelleme
     let newEnemies = state.enemies.map(e => {
       let updated = { ...e };
       
-      // Şerit değiştirme AI
-      if (!e.isChanging && Math.random() < 0.005) {
-        const possibleLanes = [-1, 0, 1].filter(l => l !== e.lane);
-        if (possibleLanes.length > 0) {
-          const newLane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
-          updated.isChanging = true;
-          updated.targetLane = newLane;
-          updated.changeProgress = 0;
+      // Oyuncuya tepki - oyuncu yaklaşınca kaçış şeridi seç
+      const playerZ = -2;
+      const distanceToPlayer = Math.abs(e.z - playerZ);
+      const isPlayerClose = distanceToPlayer < 30 && distanceToPlayer > 5;
+      
+      if (!e.isChanging && isPlayerClose) {
+        const playerX = state.targetX;
+        const enemyLane = e.lane;
+        
+        // Oyuncu aynı şeritteyse yan şeride kaç
+        if (Math.abs(playerX - (enemyLane * 4.5)) < 3) {
+          const possibleLanes = [-1, 0, 1].filter(l => {
+            if (l === enemyLane) return false;
+            // Diğer araçlarla çarpışma kontrolü
+            const targetX = l * 4.5;
+            const isSafe = !state.enemies.some(other => 
+              other.id !== e.id && 
+              Math.abs(other.x - targetX) < 3 && 
+              Math.abs(other.z - e.z) < 20
+            );
+            return isSafe;
+          });
+          
+          if (possibleLanes.length > 0) {
+            const newLane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
+            updated.isChanging = true;
+            updated.targetLane = newLane;
+            updated.changeProgress = 0;
+          }
         }
       }
       
       if (updated.isChanging) {
-        updated.changeProgress += effectiveDelta * 2;
+        updated.changeProgress += delta * 2;
         const startX = updated.lane * 4.5;
         const endX = updated.targetLane * 4.5;
         updated.x = THREE.MathUtils.lerp(startX, endX, Math.min(updated.changeProgress, 1));
@@ -356,14 +338,14 @@ const useGameStore = create((set, get) => ({
         }
       }
       
-      updated.z = e.z + (newSpeed - e.ownSpeed * 0.5) * effectiveDelta * 0.5;
+      updated.z = e.z + (newSpeed - e.ownSpeed * 0.5) * delta * 0.5;
       
       return updated;
     }).filter(e => e.z < 50);
 
     let newCoins = state.coins.map(c => ({
       ...c,
-      z: c.z + newSpeed * effectiveDelta * 0.5
+      z: c.z + newSpeed * delta * 0.5
     })).filter(c => c.z < 50);
 
     const difficulty = Math.min(state.score / 15000, 1.0);
@@ -417,9 +399,6 @@ const useGameStore = create((set, get) => ({
       }
     }
 
-    // Motor sesi güncelle
-    audioSystem.updateEngine(newSpeed);
-
     return { 
       speed: newSpeed, 
       score: newScore, 
@@ -427,7 +406,6 @@ const useGameStore = create((set, get) => ({
       coins: newCoins,
       particles: newParticles,
       totalDistance: newDistance,
-      slowMotionCooldown: newCooldown,
       cameraShake: newShake
     };
   }),
@@ -478,7 +456,7 @@ function ParticleSystem() {
 
 // --- MOBİL KONTROLLER ---
 function MobileControls() {
-  const { steer, activateSlowMotion } = useGameStore();
+  const { steer } = useGameStore();
   const intervalRef = useRef(null);
 
   const startSteering = (direction) => {
@@ -511,32 +489,6 @@ function MobileControls() {
         style={{ position: 'absolute', top: 0, right: 0, width: '50%', height: '100%', zIndex: 40, touchAction: 'none' }}
         {...handlers(1)}
       />
-      
-      {/* Slow Motion Butonu */}
-      <div
-        onTouchStart={(e) => { e.preventDefault(); activateSlowMotion(); }}
-        style={{
-          position: 'absolute',
-          bottom: '20px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: '80px',
-          height: '80px',
-          borderRadius: '50%',
-          background: 'rgba(0, 255, 255, 0.3)',
-          border: '3px solid #00ffff',
-          zIndex: 50,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '12px',
-          color: '#00ffff',
-          fontWeight: 'bold',
-          textAlign: 'center'
-        }}
-      >
-        SLOW<br/>MO
-      </div>
     </>
   );
 }
@@ -582,21 +534,21 @@ function GyroscopeHandler() {
 
 // --- HIZ GÖSTERGESİ ---
 function Speedometer({ speed }) {
-  const maxSpeed = 360;
+  const maxSpeed = 180;
   const angle = -135 + (speed / maxSpeed) * 270;
   const renderMarks = () => {
     const marks = [];
-    for (let i = 0; i <= maxSpeed; i += 30) {
+    for (let i = 0; i <= maxSpeed; i += 20) {
       const markAngle = -135 + (i / maxSpeed) * 270;
-      const isMajor = i % 60 === 0;
+      const isMajor = i % 40 === 0;
       marks.push(
         <div key={`line-${i}`} style={{ position: 'absolute', bottom: '50%', left: '50%', width: isMajor?'3px':'2px', height: '100px', transformOrigin: 'bottom center', transform: `translateX(-50%) rotate(${markAngle}deg)` }}>
-          <div style={{ width: '100%', height: isMajor?'15px':'10px', background: i>=240?'#ff3333':'#00ff00', position: 'absolute', top: 0 }}></div>
+          <div style={{ width: '100%', height: isMajor?'15px':'10px', background: i>=140?'#ff3333':'#00ff00', position: 'absolute', top: 0 }}></div>
         </div>
       );
       if (isMajor) {
         const rad = (markAngle - 90) * (Math.PI / 180);
-        marks.push(<div key={`num-${i}`} style={{ position: 'absolute', top: `calc(50% + ${Math.sin(rad)*70}px)`, left: `calc(50% + ${Math.cos(rad)*70}px)`, transform: 'translate(-50%, -50%)', fontSize: '14px', fontWeight: 'bold', color: i>=240?'#ff3333':'#00ff00' }}>{i}</div>);
+        marks.push(<div key={`num-${i}`} style={{ position: 'absolute', top: `calc(50% + ${Math.sin(rad)*70}px)`, left: `calc(50% + ${Math.cos(rad)*70}px)`, transform: 'translate(-50%, -50%)', fontSize: '14px', fontWeight: 'bold', color: i>=140?'#ff3333':'#00ff00' }}>{i}</div>);
       }
     }
     return marks;
@@ -998,32 +950,14 @@ function SkyEnvironment() {
   );
 }
 
-// --- SLOW MOTION VFX ---
-function SlowMotionVFX() {
-  const { slowMotion } = useGameStore();
-  
-  if (!slowMotion) return null;
-  
-  return (
-    <div style={{
-      position: 'absolute',
-      inset: 0,
-      background: 'radial-gradient(circle, transparent 30%, rgba(0,255,255,0.1) 100%)',
-      pointerEvents: 'none',
-      zIndex: 5,
-      animation: 'pulse 0.5s ease-in-out infinite'
-    }} />
-  );
-}
-
 // --- ANA UYGULAMA ---
 export default function App() {
   const { 
     speed, score, combo, message, gameOver, gameState, countdown, 
     startGame, quitGame, accelerate, decelerate, steer,
-    slowMotion, slowMotionCooldown, totalDistance, nearMissCount,
+    totalDistance, nearMissCount,
     selectedCar, selectCar, availableCars, upgrades, upgradeStat,
-    useGyroscope, toggleGyroscope, activateSlowMotion
+    useGyroscope, toggleGyroscope
   } = useGameStore();
   
   const [showGarage, setShowGarage] = useState(false);
@@ -1033,7 +967,6 @@ export default function App() {
       if (e.key === 'ArrowLeft') steer(-1);
       if (e.key === 'ArrowRight') steer(1);
       if (e.key === 'ArrowUp') accelerate();
-      if (e.key === ' ') activateSlowMotion();
     };
     const handleKeyUp = (e) => { if (e.key === 'ArrowUp') decelerate(); };
     window.addEventListener('keydown', handleKeyDown);
@@ -1066,17 +999,10 @@ export default function App() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a15', overflow: 'hidden' }}>
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-      `}</style>
       
       <GyroscopeHandler />
       
       {gameState === 'playing' && <MobileControls />}
-      <SlowMotionVFX />
 
       {gameState === 'countdown' && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
@@ -1175,12 +1101,6 @@ export default function App() {
             <div>Distance: {Math.floor(totalDistance)}m</div>
             <div>Near Miss: {nearMissCount}</div>
           </div>
-          
-          {slowMotionCooldown > 0 && (
-            <div style={{ position: 'absolute', bottom: 120, left: '50%', transform: 'translateX(-50%)', color: '#00ffff', fontSize: '20px', fontWeight: 'bold', zIndex: 10 }}>
-              SLOW-MO: {Math.ceil(slowMotionCooldown)}s
-            </div>
-          )}
         </>
       )}
 
