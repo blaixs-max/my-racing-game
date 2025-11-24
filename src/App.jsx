@@ -143,7 +143,8 @@ const useGameStore = create((set, get) => ({
         set({ countdown: "GO!" });
       } else {
         clearInterval(timer);
-        set({ gameState: 'playing', countdown: null, speed: 110, targetSpeed: 110 });
+        // Oyun başlangıcı - yavaş başla
+        set({ gameState: 'playing', countdown: null, speed: 60, targetSpeed: 110 });
       }
     }, 1000);
   },
@@ -783,8 +784,8 @@ function PlayerCar() {
     <group ref={group} position={[0, 0.1, -2]}>
       <primitive object={leftTarget.current} />
       <primitive object={rightTarget.current} />
-      <spotLight position={[0.8, 0.6, -1.5]} target={rightTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} />
-      <spotLight position={[-0.8, 0.6, -1.5]} target={leftTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} />
+      <spotLight position={[0.8, 0.6, -1.5]} target={rightTarget.current} angle={0.3} penumbra={0.2} intensity={30} color="#ffffee" distance={150} />
+      <spotLight position={[-0.8, 0.6, -1.5]} target={leftTarget.current} angle={0.3} penumbra={0.2} intensity={30} color="#ffffee" distance={150} />
       
       {/* Shadow casting kaldırıldı - performans */}
       <mesh position={[0, 0.4, 0]} material={bodyMat}><boxGeometry args={[1.8, 0.5, 4.2]} /></mesh>
@@ -1106,9 +1107,12 @@ function CameraShake() {
 function SkyEnvironment() {
   return (
     <group>
-      <Stars radius={150} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
-      <mesh position={[50, 80, -200]}><sphereGeometry args={[10, 32, 32]} /><meshBasicMaterial color="#ffffff" /></mesh>
-      <pointLight position={[50, 80, -180]} intensity={1.5} color="#aabbff" distance={500} />
+      <Stars radius={150} depth={50} count={3000} factor={4} saturation={0.2} fade speed={1} />
+      <mesh position={[50, 80, -200]}>
+        <sphereGeometry args={[10, 32, 32]} />
+        <meshBasicMaterial color="#ffffee" emissive="#ffffaa" emissiveIntensity={0.8} />
+      </mesh>
+      <pointLight position={[50, 80, -180]} intensity={0.8} color="#ffffdd" distance={500} />
     </group>
   );
 }
@@ -1854,9 +1858,16 @@ export default function App() {
       <Canvas 
         shadows={{ type: THREE.PCFSoftShadowMap, shadowMapSize: [512, 512] }}
         dpr={[1, 1.5]} 
-        gl={{ antialias: false, powerPreference: "high-performance" }}
+        gl={{ 
+          antialias: false, 
+          powerPreference: "high-performance",
+          alpha: false
+        }}
         frameloop="always"
+        style={{ background: '#0a0a15' }}
       >
+        <color attach="background" args={['#0a0a15']} />
+        <fog attach="fog" args={['#0a0a15', 50, 300]} />
         <PerspectiveCamera 
           makeDefault 
           position={
@@ -1868,8 +1879,8 @@ export default function App() {
             (isPortrait ? 65 : 55)
           } 
         />
-        <ambientLight intensity={0.6} color="#ffffff" /> 
-        <hemisphereLight skyColor="#445566" groundColor="#223344" intensity={0.6} />
+        <ambientLight intensity={0.4} color="#ffffff" /> 
+        <hemisphereLight skyColor="#445566" groundColor="#223344" intensity={0.5} />
         <Suspense fallback={null}>
           <SkyEnvironment />
           <CameraShake />
