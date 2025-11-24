@@ -330,6 +330,7 @@ const useGameStore = create((set, get) => ({
       particles: [...state.particles, ...newParticles]
     }));
     
+    // ✅ FIX: Aynı sürede kaybolsun (600ms)
     setTimeout(() => set({ message: "" }), 600);
   },
 
@@ -577,7 +578,6 @@ ParticleSystem.displayName = 'ParticleSystem';
 // ==================== MOBİL KONTROLLER ====================
 const MobileControls = memo(() => {
   const { steer, activateNitro, deactivateNitro } = useGameStore();
-  const { isMobile, isPortrait } = useResponsive();
   const intervalRef = useRef(null);
 
   useEffect(() => {
@@ -629,11 +629,6 @@ const MobileControls = memo(() => {
     onDragStart: preventAll,
   }), [startSteering, stopSteering, preventAll]);
 
-  // Nitro button size based on orientation
-  const nitroSize = isPortrait ? '50px' : '60px';
-  const nitroBottom = isPortrait ? '80px' : '15px';
-  const nitroRight = isPortrait ? '15px' : '15px';
-
   return (
     <>
       <div
@@ -669,6 +664,7 @@ const MobileControls = memo(() => {
         {...handlers(1)}
       />
       
+      {/* Nitro Button - Portrait için */}
       <div
         onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); activateNitro(); }}
         onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); deactivateNitro(); }}
@@ -678,10 +674,10 @@ const MobileControls = memo(() => {
         onDragStart={preventAll}
         style={{
           position: 'fixed',
-          bottom: nitroBottom,
-          right: nitroRight,
-          width: nitroSize,
-          height: nitroSize,
+          bottom: '80px',
+          right: '15px',
+          width: '50px',
+          height: '50px',
           borderRadius: '50%',
           background: 'linear-gradient(135deg, #ff4500 0%, #ff6600 50%, #ff8c00 100%)',
           border: '3px solid #fff',
@@ -1263,23 +1259,20 @@ function RoadEnvironment() {
 const CameraShake = memo(() => {
   const { cameraShake, gameState } = useGameStore();
   const { camera } = useThree();
-  const { isMobile, isPortrait } = useResponsive();
   
   const originalPosition = useRef({ 
     x: 0, 
-    y: isMobile && isPortrait ? 4 : (isMobile ? 3.5 : 6), 
-    z: isMobile && isPortrait ? 8 : (isMobile ? 10 : 14)
+    y: 4,
+    z: 8
   });
   
   useEffect(() => {
     if (gameState === 'playing') {
-      const posY = isMobile && isPortrait ? 4 : (isMobile ? 3.5 : 6);
-      const posZ = isMobile && isPortrait ? 8 : (isMobile ? 10 : 14);
-      camera.position.set(0, posY, posZ);
+      camera.position.set(0, 4, 8);
       camera.rotation.set(0, 0, 0);
-      originalPosition.current = { x: 0, y: posY, z: posZ };
+      originalPosition.current = { x: 0, y: 4, z: 8 };
     }
-  }, [gameState, camera, isMobile, isPortrait]);
+  }, [gameState, camera]);
   
   useFrame(() => {
     if (cameraShake > 0) {
@@ -1321,6 +1314,54 @@ const SkyEnvironment = memo(() => {
 });
 
 SkyEnvironment.displayName = 'SkyEnvironment';
+
+// ==================== LANDSCAPE BLOCKER - MOBİL İÇİN ====================
+const LandscapeBlocker = memo(() => {
+  const { isMobile, isPortrait } = useResponsive();
+  
+  if (!isMobile || isPortrait) return null;
+  
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      background: '#000',
+      zIndex: 9999,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: '#fff',
+      textAlign: 'center',
+      padding: '20px'
+    }}>
+      <div style={{ fontSize: '60px', marginBottom: '20px' }}>📱</div>
+      <h1 style={{ fontSize: '32px', marginBottom: '20px', color: '#00ffff' }}>Lütfen Telefonunuzu Döndürün</h1>
+      <p style={{ fontSize: '18px', color: '#aaa' }}>Bu oyun sadece dikey (portrait) modda oynanabilir</p>
+      <div style={{ 
+        marginTop: '30px',
+        width: '80px',
+        height: '120px',
+        border: '4px solid #00ffff',
+        borderRadius: '10px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        animation: 'rotatePhone 2s ease-in-out infinite'
+      }}>
+        <div style={{ fontSize: '40px' }}>📲</div>
+      </div>
+      <style>{`
+        @keyframes rotatePhone {
+          0%, 100% { transform: rotate(0deg); }
+          50% { transform: rotate(90deg); }
+        }
+      `}</style>
+    </div>
+  );
+});
+
+LandscapeBlocker.displayName = 'LandscapeBlocker';
 
 // ==================== ANA UYGULAMA ====================
 function Game() {
@@ -1466,44 +1507,10 @@ function Game() {
     startGame();
   }, [startGame]);
 
-  // ✅ RESPONSIVE HUD POSITIONS
-  const getHUDPositions = () => {
-    // Desktop
-    if (!isMobile) {
-      return {
-        speedometer: { top: '20px', left: '20px', scale: 1 },
-        score: { top: '20px', right: '20px' },
-        nitro: { top: '20px', left: '50%', transform: 'translateX(-50%)' },
-        combo: { top: '20px', right: '380px' }, // Score ile Nitro arasında, sağda
-        distance: { top: '120px', right: '20px' },
-        nearMiss: { top: '190px', right: '20px' }
-      };
-    }
-    
-    // Mobile Portrait
-    if (isPortrait) {
-      return {
-        speedometer: { top: '3px', left: '3px', scale: 0.35 },
-        score: { top: '5px', right: '5px' },
-        nitro: { top: '5px', left: '50%', transform: 'translateX(-50%)' },
-        combo: { top: '5px', right: '130px' }, // Score ile Nitro arasında
-        distance: { top: '70px', right: '5px' }, // Score'un altında
-        nearMiss: { top: '105px', right: '5px' } // Distance'ın altında
-      };
-    }
-    
-    // Mobile Landscape
-    return {
-      speedometer: { top: '5px', left: '5px', scale: 0.5 },
-      score: { top: '5px', right: '5px' },
-      nitro: { top: '5px', left: '50%', transform: 'translateX(-50%)' },
-      combo: { top: '5px', right: '200px' }, // Score ile Nitro arasında
-      distance: { top: '60px', right: '5px' },
-      nearMiss: { top: '100px', right: '5px' }
-    };
-  };
-
-  const hudPos = getHUDPositions();
+  // ✅ FIX 2: Mobil landscape'de oyunu engelle
+  if (isMobile && !isPortrait) {
+    return <LandscapeBlocker />;
+  }
 
   return (
     <div style={{ 
@@ -1596,48 +1603,48 @@ function Game() {
 
       {gameState === 'countdown' && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <h1 style={{ fontSize: isMobile && isPortrait ? '80px' : (isMobile ? '60px' : '150px'), color: '#00ff00', textShadow: '0 0 30px #fff', fontStyle: 'italic', fontFamily: 'Arial', userSelect: 'none' }}>{countdown}</h1>
+          <h1 style={{ fontSize: isMobile ? '80px' : '150px', color: '#00ff00', textShadow: '0 0 30px #fff', fontStyle: 'italic', fontFamily: 'Arial', userSelect: 'none' }}>{countdown}</h1>
         </div>
       )}
 
       {gameState === 'menu' && (
-        <div style={{ position: 'absolute', zIndex: 60, inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)', gap: isMobile && isPortrait ? '15px' : (isMobile ? '10px' : '20px'), userSelect: 'none', WebkitUserSelect: 'none', padding: '20px' }}>
-          <h1 style={{ fontSize: isMobile && isPortrait ? '36px' : (isMobile ? '28px' : '60px'), color: '#00ffff', textShadow: '0 0 30px #00ffff', marginBottom: isMobile && isPortrait ? '10px' : (isMobile ? '5px' : '20px'), userSelect: 'none', textAlign: 'center' }}>HIGHWAY RACER</h1>
+        <div style={{ position: 'absolute', zIndex: 60, inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)', gap: isMobile ? '15px' : '20px', userSelect: 'none', WebkitUserSelect: 'none', padding: '20px' }}>
+          <h1 style={{ fontSize: isMobile ? '36px' : '60px', color: '#00ffff', textShadow: '0 0 30px #00ffff', marginBottom: isMobile ? '10px' : '20px', userSelect: 'none', textAlign: 'center' }}>HIGHWAY RACER</h1>
           
-          <button onClick={handleStart} style={{ padding: isMobile && isPortrait ? '15px 40px' : (isMobile ? '12px 30px' : '20px 60px'), fontSize: isMobile && isPortrait ? '20px' : (isMobile ? '16px' : '30px'), background: '#00ff00', color:'#000', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #00ff00', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
+          <button onClick={handleStart} style={{ padding: isMobile ? '15px 40px' : '20px 60px', fontSize: isMobile ? '20px' : '30px', background: '#00ff00', color:'#000', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #00ff00', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
             START RACE
           </button>
           
-          <button onClick={() => setShowGarage(!showGarage)} style={{ padding: isMobile && isPortrait ? '12px 30px' : (isMobile ? '10px 25px' : '15px 40px'), fontSize: isMobile && isPortrait ? '16px' : (isMobile ? '14px' : '20px'), background: '#ff00ff', color:'#fff', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #ff00ff', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
+          <button onClick={() => setShowGarage(!showGarage)} style={{ padding: isMobile ? '12px 30px' : '15px 40px', fontSize: isMobile ? '16px' : '20px', background: '#ff00ff', color:'#fff', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #ff00ff', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
             {showGarage ? 'CLOSE GARAGE' : 'GARAGE & UPGRADES'}
           </button>
           
-          <button onClick={toggleGyroscope} style={{ padding: isMobile && isPortrait ? '8px 20px' : (isMobile ? '6px 15px' : '10px 30px'), fontSize: isMobile && isPortrait ? '14px' : (isMobile ? '12px' : '16px'), background: useGyroscope ? '#00ff00' : '#666', color:'#fff', border: 'none', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
+          <button onClick={toggleGyroscope} style={{ padding: isMobile ? '8px 20px' : '10px 30px', fontSize: isMobile ? '14px' : '16px', background: useGyroscope ? '#00ff00' : '#666', color:'#fff', border: 'none', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
             GYROSCOPE: {useGyroscope ? 'ON' : 'OFF'}
           </button>
           
           {showGarage && (
             <div style={{ 
               background: 'rgba(0,0,0,0.9)', 
-              padding: isMobile && isPortrait ? '15px' : (isMobile ? '10px' : '30px'), 
+              padding: isMobile ? '15px' : '30px', 
               borderRadius: '20px', 
-              maxWidth: isMobile && isPortrait ? '90%' : (isMobile ? '85%' : '800px'),
+              maxWidth: isMobile ? '90%' : '800px',
               width: isMobile ? '90%' : 'auto',
-              maxHeight: isMobile && isPortrait ? '70vh' : (isMobile ? '60vh' : 'auto'),
+              maxHeight: isMobile ? '70vh' : 'auto',
               overflowY: isMobile ? 'auto' : 'visible',
               border: '2px solid #00ffff', 
               userSelect: 'none', 
               WebkitUserSelect: 'none' 
             }}>
-              <h2 style={{ color: '#00ffff', marginBottom: isMobile && isPortrait ? '10px' : (isMobile ? '8px' : '20px'), userSelect: 'none', fontSize: isMobile && isPortrait ? '18px' : (isMobile ? '16px' : '24px') }}>SELECT CAR</h2>
-              <div style={{ display: 'flex', gap: isMobile && isPortrait ? '10px' : (isMobile ? '8px' : '20px'), marginBottom: isMobile && isPortrait ? '15px' : (isMobile ? '12px' : '30px'), flexWrap: 'wrap', justifyContent: 'center' }}>
+              <h2 style={{ color: '#00ffff', marginBottom: isMobile ? '10px' : '20px', userSelect: 'none', fontSize: isMobile ? '18px' : '24px' }}>SELECT CAR</h2>
+              <div style={{ display: 'flex', gap: isMobile ? '10px' : '20px', marginBottom: isMobile ? '15px' : '30px', flexWrap: 'wrap', justifyContent: 'center' }}>
                 {availableCars.map(car => (
                   <button 
                     key={car} 
                     onClick={() => selectCar(car)}
                     style={{ 
-                      padding: isMobile && isPortrait ? '10px 20px' : (isMobile ? '8px 15px' : '15px 30px'),
-                      fontSize: isMobile && isPortrait ? '14px' : (isMobile ? '12px' : '16px'),
+                      padding: isMobile ? '10px 20px' : '15px 30px',
+                      fontSize: isMobile ? '14px' : '16px',
                       background: selectedCar === car ? '#00ffff' : '#333', 
                       color: selectedCar === car ? '#000' : '#fff',
                       border: '2px solid #00ffff',
@@ -1656,30 +1663,30 @@ function Game() {
                 ))}
               </div>
               
-              <h2 style={{ color: '#00ffff', marginBottom: isMobile && isPortrait ? '10px' : (isMobile ? '8px' : '20px'), userSelect: 'none', fontSize: isMobile && isPortrait ? '18px' : (isMobile ? '16px' : '24px') }}>UPGRADES</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile && isPortrait ? '10px' : (isMobile ? '8px' : '15px') }}>
+              <h2 style={{ color: '#00ffff', marginBottom: isMobile ? '10px' : '20px', userSelect: 'none', fontSize: isMobile ? '18px' : '24px' }}>UPGRADES</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '10px' : '15px' }}>
                 {['speed', 'control', 'durability'].map(stat => (
                   <div key={stat} style={{ 
                     display: 'flex', 
                     justifyContent: 'space-between', 
                     alignItems: 'center', 
                     background: 'rgba(255,255,255,0.1)', 
-                    padding: isMobile && isPortrait ? '10px' : (isMobile ? '8px' : '15px'),
+                    padding: isMobile ? '10px' : '15px',
                     borderRadius: '10px', 
                     userSelect: 'none',
                     flexWrap: isMobile ? 'wrap' : 'nowrap',
                     gap: isMobile ? '10px' : '0'
                   }}>
                     <div>
-                      <span style={{ color: '#fff', textTransform: 'uppercase', fontWeight: 'bold', userSelect: 'none', fontSize: isMobile && isPortrait ? '14px' : (isMobile ? '12px' : '16px') }}>{stat}</span>
-                      <span style={{ color: '#00ff00', marginLeft: '10px', userSelect: 'none', fontSize: isMobile && isPortrait ? '12px' : (isMobile ? '10px' : '14px') }}>Level {upgrades[stat]}/5</span>
+                      <span style={{ color: '#fff', textTransform: 'uppercase', fontWeight: 'bold', userSelect: 'none', fontSize: isMobile ? '14px' : '16px' }}>{stat}</span>
+                      <span style={{ color: '#00ff00', marginLeft: '10px', userSelect: 'none', fontSize: isMobile ? '12px' : '14px' }}>Level {upgrades[stat]}/5</span>
                     </div>
                     <button 
                       onClick={() => upgradeStat(stat)}
                       disabled={upgrades[stat] >= 5}
                       style={{ 
-                        padding: isMobile && isPortrait ? '8px 15px' : (isMobile ? '6px 12px' : '10px 20px'),
-                        fontSize: isMobile && isPortrait ? '12px' : (isMobile ? '10px' : '14px'),
+                        padding: isMobile ? '8px 15px' : '10px 20px',
+                        fontSize: isMobile ? '12px' : '14px',
                         background: upgrades[stat] >= 5 ? '#666' : '#00ff00',
                         color: '#000',
                         border: 'none',
@@ -1702,9 +1709,9 @@ function Game() {
         </div>
       )}
 
-      {/* ✅ RESPONSIVE HUD */}
-      <div style={{ position: 'absolute', ...hudPos.speedometer, zIndex: 10, pointerEvents: 'none' }}>
-        <div style={{ transform: `scale(${hudPos.speedometer.scale})`, transformOrigin: 'top left' }}>
+      {/* HUD - Speedometer */}
+      <div style={{ position: 'absolute', top: isMobile ? '3px' : '20px', left: isMobile ? '3px' : '20px', zIndex: 10, pointerEvents: 'none' }}>
+        <div style={{ transform: isMobile ? 'scale(0.35)' : 'scale(1)', transformOrigin: 'top left' }}>
           <Speedometer speed={speed} />
         </div>
       </div>
@@ -1712,20 +1719,21 @@ function Game() {
       {/* Score */}
       <div style={{ 
         position: 'fixed',
-        ...hudPos.score,
+        top: isMobile ? '5px' : '20px',
+        right: isMobile ? '5px' : '20px',
         background: 'linear-gradient(135deg, #333 0%, #000 100%)',
         border: '2px solid #555', 
-        borderRadius: isMobile && isPortrait ? '5px' : (isMobile ? '4px' : '10px'), 
-        padding: isMobile && isPortrait ? '3px 8px' : (isMobile ? '2px 6px' : '10px 30px'),
+        borderRadius: isMobile ? '5px' : '10px', 
+        padding: isMobile ? '3px 8px' : '10px 30px',
         transform: 'skewX(-15deg)', 
         zIndex: 10, 
         color: '#fff', 
         textAlign: 'right', 
         boxShadow: '0 5px 15px rgba(0,0,0,0.5)',
-        fontSize: isMobile && isPortrait ? '0.6em' : (isMobile ? '0.5em' : '1em')
+        fontSize: isMobile ? '0.6em' : '1em'
       }}>
-        <div style={{ fontSize: isMobile && isPortrait ? '8px' : (isMobile ? '6px' : '12px'), ...scoreStyle, transform: 'skewX(15deg)' }}>SCORE</div>
-        <div style={{ fontSize: isMobile && isPortrait ? '16px' : (isMobile ? '12px' : '40px'), ...scoreStyle, transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
+        <div style={{ fontSize: isMobile ? '8px' : '12px', ...scoreStyle, transform: 'skewX(15deg)' }}>SCORE</div>
+        <div style={{ fontSize: isMobile ? '16px' : '40px', ...scoreStyle, transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
       </div>
 
       {/* Nitro Bar */}
@@ -1733,17 +1741,19 @@ function Game() {
         <>
           <div style={{
             position: 'fixed',
-            ...hudPos.nitro,
+            top: isMobile ? '5px' : '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
             zIndex: 10,
             pointerEvents: 'none'
           }}>
             <div style={{
-              width: isMobile && isPortrait ? '140px' : (isMobile ? '180px' : '300px'),
-              height: isMobile && isPortrait ? '35px' : (isMobile ? '40px' : '70px'),
+              width: isMobile ? '140px' : '300px',
+              height: isMobile ? '35px' : '70px',
               background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
               border: nitro >= 100 ? '2px solid #ff6600' : '2px solid #ff9933',
-              borderRadius: isMobile && isPortrait ? '18px' : (isMobile ? '20px' : '35px'),
-              padding: isMobile && isPortrait ? '2px' : (isMobile ? '3px' : '5px'),
+              borderRadius: isMobile ? '18px' : '35px',
+              padding: isMobile ? '2px' : '5px',
               boxShadow: nitro >= 100 
                 ? '0 5px 30px rgba(255,102,0,0.9), 0 0 40px rgba(255,69,0,0.7)' 
                 : '0 5px 20px rgba(255,153,51,0.6)',
@@ -1755,7 +1765,7 @@ function Game() {
                 top: '50%',
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
-                fontSize: isMobile && isPortrait ? '14px' : (isMobile ? '16px' : '30px'),
+                fontSize: isMobile ? '14px' : '30px',
                 fontWeight: 'bold',
                 color: nitro >= 100 ? '#fff' : '#666',
                 zIndex: 2,
@@ -1776,7 +1786,7 @@ function Game() {
                   : isNitroActive 
                     ? 'linear-gradient(90deg, #ff9933 0%, #ffaa55 100%)'
                     : 'linear-gradient(90deg, #ff9933 0%, #ff7722 100%)',
-                borderRadius: isMobile && isPortrait ? '15px' : (isMobile ? '17px' : '30px'),
+                borderRadius: isMobile ? '15px' : '30px',
                 transition: 'width 0.1s ease-out, background 0.3s ease',
                 boxShadow: nitro >= 100
                   ? '0 0 30px rgba(255,102,0,1), inset 0 0 20px rgba(255,69,0,0.8)'
@@ -1792,46 +1802,25 @@ function Game() {
               }} />
             </div>
           </div>
-
-          {/* ✅ Combo - Score ile Nitro arasında */}
-          {combo > 1 && (
-            <div style={{ 
-              position: 'fixed', 
-              ...hudPos.combo,
-              fontSize: isMobile && isPortrait ? '18px' : (isMobile ? '14px' : '32px'), 
-              color: '#00ff00', 
-              fontWeight: 'bold', 
-              zIndex: 10, 
-              textShadow: '0 0 15px lime', 
-              userSelect: 'none', 
-              WebkitUserSelect: 'none', 
-              pointerEvents: 'none',
-              background: 'rgba(0,0,0,0.5)',
-              padding: isMobile && isPortrait ? '5px 10px' : (isMobile ? '4px 8px' : '8px 15px'),
-              borderRadius: '10px',
-              border: '2px solid #00ff00'
-            }}>
-              {combo}x COMBO
-            </div>
-          )}
           
           {/* Distance */}
           <div style={{ 
             position: 'fixed',
-            ...hudPos.distance,
+            top: isMobile ? '70px' : '120px',
+            right: isMobile ? '5px' : '20px',
             zIndex: 10
           }}>
             <div style={{ 
               background: 'linear-gradient(135deg, #1a1a2e 0%, #0f0f1a 100%)',
               border: '2px solid #00ffff', 
-              borderRadius: isMobile && isPortrait ? '4px' : (isMobile ? '3px' : '10px'), 
-              padding: isMobile && isPortrait ? '3px 8px' : (isMobile ? '2px 6px' : '8px 20px'),
+              borderRadius: isMobile ? '4px' : '10px', 
+              padding: isMobile ? '3px 8px' : '8px 20px',
               transform: 'skewX(-15deg)',
               boxShadow: '0 5px 15px rgba(0,255,255,0.3)'
             }}>
               <div style={{ transform: 'skewX(15deg)', textAlign: 'center' }}>
-                <div style={{ fontSize: isMobile && isPortrait ? '7px' : (isMobile ? '6px' : '10px'), color: '#00ffff', fontWeight: 'bold' }}>DISTANCE</div>
-                <div style={{ fontSize: isMobile && isPortrait ? '12px' : (isMobile ? '10px' : '24px'), color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #00ffff' }}>{Math.floor(totalDistance)}m</div>
+                <div style={{ fontSize: isMobile ? '7px' : '10px', color: '#00ffff', fontWeight: 'bold' }}>DISTANCE</div>
+                <div style={{ fontSize: isMobile ? '12px' : '24px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #00ffff' }}>{Math.floor(totalDistance)}m</div>
               </div>
             </div>
           </div>
@@ -1839,40 +1828,63 @@ function Game() {
           {/* Near Miss */}
           <div style={{ 
             position: 'fixed',
-            ...hudPos.nearMiss,
+            top: isMobile ? '105px' : '190px',
+            right: isMobile ? '5px' : '20px',
             zIndex: 10
           }}>
             <div style={{ 
               background: 'linear-gradient(135deg, #2e1a1a 0%, #1a0f0f 100%)',
               border: '2px solid #ff00ff', 
-              borderRadius: isMobile && isPortrait ? '4px' : (isMobile ? '3px' : '10px'), 
-              padding: isMobile && isPortrait ? '3px 8px' : (isMobile ? '2px 6px' : '8px 20px'),
+              borderRadius: isMobile ? '4px' : '10px', 
+              padding: isMobile ? '3px 8px' : '8px 20px',
               transform: 'skewX(-15deg)',
               boxShadow: '0 5px 15px rgba(255,0,255,0.3)'
             }}>
               <div style={{ transform: 'skewX(15deg)', textAlign: 'center' }}>
-                <div style={{ fontSize: isMobile && isPortrait ? '7px' : (isMobile ? '6px' : '10px'), color: '#ff00ff', fontWeight: 'bold' }}>NEAR MISS</div>
-                <div style={{ fontSize: isMobile && isPortrait ? '12px' : (isMobile ? '10px' : '24px'), color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #ff00ff' }}>{nearMissCount}</div>
+                <div style={{ fontSize: isMobile ? '7px' : '10px', color: '#ff00ff', fontWeight: 'bold' }}>NEAR MISS</div>
+                <div style={{ fontSize: isMobile ? '12px' : '24px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #ff00ff' }}>{nearMissCount}</div>
               </div>
             </div>
           </div>
         </>
       )}
       
-      {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: messageColor, fontSize: isMobile && isPortrait ? 'clamp(16px, 5vw, 36px)' : (isMobile ? 'clamp(14px, 4vw, 28px)' : 'clamp(30px, 8vw, 80px)'), fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: messageShadow, textTransform: 'uppercase', letterSpacing: '2px', whiteSpace: 'nowrap', userSelect: 'none', WebkitUserSelect: 'none', pointerEvents: 'none' }}>{message}</div>}
+      {/* ✅ FIX 1: Mesaj - Combo ile birlikte göster */}
+      {message && (
+        <div style={{ 
+          position: 'absolute', 
+          top: '30%', 
+          left: '50%', 
+          transform: 'translate(-50%, -50%)', 
+          color: messageColor, 
+          fontSize: isMobile ? 'clamp(16px, 5vw, 36px)' : 'clamp(30px, 8vw, 80px)', 
+          fontWeight: 'bold', 
+          fontStyle: 'italic', 
+          zIndex: 15, 
+          textShadow: messageShadow, 
+          textTransform: 'uppercase', 
+          letterSpacing: '2px', 
+          whiteSpace: 'nowrap', 
+          userSelect: 'none', 
+          WebkitUserSelect: 'none', 
+          pointerEvents: 'none' 
+        }}>
+          {message}
+        </div>
+      )}
 
       {gameOver && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(50,0,0,0.95)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Arial', userSelect: 'none', WebkitUserSelect: 'none', padding: '20px' }}>
-          <h1 style={{ fontSize: isMobile && isPortrait ? 'clamp(30px, 8vw, 50px)' : (isMobile ? 'clamp(25px, 7vw, 40px)' : 'clamp(40px, 10vw, 80px)'), color: '#ff0000', margin: '0 0 20px 0', textShadow: '0 0 30px red', textTransform: 'uppercase', textAlign: 'center', userSelect: 'none' }}>YOU CRASHED</h1>
-          <h2 style={{ color: '#fff', fontSize: isMobile && isPortrait ? '20px' : (isMobile ? '16px' : '30px'), marginBottom: isMobile && isPortrait ? '15px' : (isMobile ? '12px' : '20px'), userSelect: 'none' }}>FINAL SCORE: {Math.floor(score)}</h2>
-          <div style={{ color: '#00ffff', fontSize: isMobile && isPortrait ? '16px' : (isMobile ? '14px' : '20px'), marginBottom: isMobile && isPortrait ? '30px' : (isMobile ? '25px' : '40px'), userSelect: 'none', textAlign: 'center' }}>
+          <h1 style={{ fontSize: isMobile ? 'clamp(30px, 8vw, 50px)' : 'clamp(40px, 10vw, 80px)', color: '#ff0000', margin: '0 0 20px 0', textShadow: '0 0 30px red', textTransform: 'uppercase', textAlign: 'center', userSelect: 'none' }}>YOU CRASHED</h1>
+          <h2 style={{ color: '#fff', fontSize: isMobile ? '20px' : '30px', marginBottom: isMobile ? '15px' : '20px', userSelect: 'none' }}>FINAL SCORE: {Math.floor(score)}</h2>
+          <div style={{ color: '#00ffff', fontSize: isMobile ? '16px' : '20px', marginBottom: isMobile ? '30px' : '40px', userSelect: 'none', textAlign: 'center' }}>
             <div>Distance: {Math.floor(totalDistance)}m</div>
             <div>Near Misses: {nearMissCount}</div>
           </div>
           
-          <div style={{ display: 'flex', gap: isMobile && isPortrait ? '15px' : (isMobile ? '12px' : '20px'), flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button onClick={startGame} style={{ padding: isMobile && isPortrait ? '15px 30px' : (isMobile ? '12px 25px' : '20px 40px'), fontSize: isMobile && isPortrait ? '18px' : (isMobile ? '16px' : '24px'), cursor: 'pointer', background: '#fff', color: '#000', border: 'none', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', boxShadow: '0 0 20px white', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>RESTART</button>
-            <button onClick={quitGame} style={{ padding: isMobile && isPortrait ? '15px 30px' : (isMobile ? '12px 25px' : '20px 40px'), fontSize: isMobile && isPortrait ? '18px' : (isMobile ? '16px' : '24px'), cursor: 'pointer', background: '#333', color: '#fff', border: '1px solid #666', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>QUIT</button>
+          <div style={{ display: 'flex', gap: isMobile ? '15px' : '20px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button onClick={startGame} style={{ padding: isMobile ? '15px 30px' : '20px 40px', fontSize: isMobile ? '18px' : '24px', cursor: 'pointer', background: '#fff', color: '#000', border: 'none', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', boxShadow: '0 0 20px white', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>RESTART</button>
+            <button onClick={quitGame} style={{ padding: isMobile ? '15px 30px' : '20px 40px', fontSize: isMobile ? '18px' : '24px', cursor: 'pointer', background: '#333', color: '#fff', border: '1px solid #666', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>QUIT</button>
           </div>
         </div>
       )}
@@ -1885,8 +1897,8 @@ function Game() {
       >
         <PerspectiveCamera 
           makeDefault 
-          position={isMobile && isPortrait ? [0, 4, 8] : (isMobile ? [0, 3.5, 10] : [0, 6, 14])} 
-          fov={isMobile && isPortrait ? 65 : (isMobile ? 70 : 55)} 
+          position={[0, 4, 8]}
+          fov={65} 
         />
         <ambientLight intensity={0.6} color="#ffffff" /> 
         <hemisphereLight skyColor="#445566" groundColor="#223344" intensity={0.6} />
