@@ -784,8 +784,8 @@ function PlayerCar() {
     <group ref={group} position={[0, 0.1, -2]}>
       <primitive object={leftTarget.current} />
       <primitive object={rightTarget.current} />
-      <spotLight position={[0.8, 0.6, -1.5]} target={rightTarget.current} angle={0.3} penumbra={0.2} intensity={30} color="#ffffee" distance={150} />
-      <spotLight position={[-0.8, 0.6, -1.5]} target={leftTarget.current} angle={0.3} penumbra={0.2} intensity={30} color="#ffffee" distance={150} />
+      <spotLight position={[0.8, 0.6, -1.5]} target={rightTarget.current} angle={0.3} penumbra={0.3} intensity={5} color="#ffffee" distance={80} decay={2} />
+      <spotLight position={[-0.8, 0.6, -1.5]} target={leftTarget.current} angle={0.3} penumbra={0.3} intensity={5} color="#ffffee" distance={80} decay={2} />
       
       {/* Shadow casting kaldırıldı - performans */}
       <mesh position={[0, 0.4, 0]} material={bodyMat}><boxGeometry args={[1.8, 0.5, 4.2]} /></mesh>
@@ -1103,6 +1103,30 @@ function CameraShake() {
   return null;
 }
 
+// --- SCENE SETUP ---
+function SceneSetup() {
+  const { scene, gl } = useThree();
+  
+  useEffect(() => {
+    // Force set background
+    scene.background = new THREE.Color('#0a0a15');
+    scene.fog = new THREE.Fog('#0a0a15', 50, 300);
+    gl.setClearColor('#0a0a15', 1);
+    
+    // Tone mapping ayarları
+    gl.toneMapping = THREE.NoToneMapping;
+    gl.toneMappingExposure = 1.0;
+  }, [scene, gl]);
+  
+  // Test mesh - her zaman görünen
+  return (
+    <mesh position={[0, 2, -10]}>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshBasicMaterial color="#ff0000" />
+    </mesh>
+  );
+}
+
 // --- GÖKYÜZÜ ---
 function SkyEnvironment() {
   return (
@@ -1110,9 +1134,22 @@ function SkyEnvironment() {
       <Stars radius={150} depth={50} count={3000} factor={4} saturation={0.2} fade speed={1} />
       <mesh position={[50, 80, -200]}>
         <sphereGeometry args={[10, 32, 32]} />
-        <meshBasicMaterial color="#ffffee" emissive="#ffffaa" emissiveIntensity={0.8} />
+        <meshBasicMaterial color="#ffffdd" emissive="#ffffaa" emissiveIntensity={0.3} />
       </mesh>
-      <pointLight position={[50, 80, -180]} intensity={0.8} color="#ffffdd" distance={500} />
+      <pointLight position={[50, 80, -180]} intensity={0.3} color="#ffffdd" distance={300} decay={2} />
+    </group>
+  );
+}
+
+// --- LOADING SCENE ---
+function LoadingScene() {
+  return (
+    <group>
+      <ambientLight intensity={0.3} />
+      <mesh position={[0, 0, -5]}>
+        <boxGeometry args={[0.5, 0.5, 0.5]} />
+        <meshBasicMaterial color="#00ffff" />
+      </mesh>
     </group>
   );
 }
@@ -1301,8 +1338,20 @@ export default function App() {
       top: 0,
       left: 0,
       margin: 0,
-      padding: 0
+      padding: 0,
+      zIndex: 0
     }}>
+      
+      {/* Background guard - beyaz ekranı kesinlikle engelle */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        background: '#0a0a15',
+        zIndex: 0
+      }} />
       
       <style>{`
         * {
@@ -1861,13 +1910,20 @@ export default function App() {
         gl={{ 
           antialias: false, 
           powerPreference: "high-performance",
-          alpha: false
+          alpha: false,
+          preserveDrawingBuffer: true
         }}
         frameloop="always"
-        style={{ background: '#0a0a15' }}
+        style={{ 
+          background: '#0a0a15',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 1
+        }}
       >
-        <color attach="background" args={['#0a0a15']} />
-        <fog attach="fog" args={['#0a0a15', 50, 300]} />
         <PerspectiveCamera 
           makeDefault 
           position={
@@ -1879,9 +1935,10 @@ export default function App() {
             (isPortrait ? 65 : 55)
           } 
         />
-        <ambientLight intensity={0.4} color="#ffffff" /> 
-        <hemisphereLight skyColor="#445566" groundColor="#223344" intensity={0.5} />
-        <Suspense fallback={null}>
+        <ambientLight intensity={0.2} color="#ffffff" /> 
+        <hemisphereLight skyColor="#445566" groundColor="#223344" intensity={0.3} />
+        <SceneSetup />
+        <Suspense fallback={<LoadingScene />}>
           <SkyEnvironment />
           <CameraShake />
           <ParticleSystem />
