@@ -218,7 +218,8 @@ const useGameStore = create((set, get) => ({
       currentRoadType: 'straight',
       nitro: 100,
       isNitroActive: false,
-      updateCounter: 0
+      updateCounter: 0,
+      cameraShake: 0
     });
 
     let count = 3;
@@ -252,7 +253,10 @@ const useGameStore = create((set, get) => ({
       currentX: 0,
       targetX: 0,
       cameraShake: 0,
-      countdownTimer: null
+      countdownTimer: null,
+      particles: [],
+      enemies: [],
+      coins: []
     });
   },
   
@@ -851,17 +855,25 @@ function PlayerCar() {
       const dz = Math.abs(enemy.z - (-2));
       
       const enemyDim = VEHICLE_DIMENSIONS[enemy.type] || VEHICLE_DIMENSIONS.sedan;
-      const crashWidthThreshold = (playerWidth + enemyDim.width) / 2 - 0.2;
+      const crashWidthThreshold = (playerWidth + enemyDim.width) / 2;
       const crashDepthThreshold = (playerLength + enemyDim.length) / 2;
       
+      // Çarpışma kontrolü
       if (dz < crashDepthThreshold && dx < crashWidthThreshold) {
         hasCollision = true;
       }
       
-      const nearMissWidthThreshold = crashWidthThreshold + 1.5;
-      const nearMissDepthThreshold = crashDepthThreshold + 2.0;
+      // Near miss için çok daha dar threshold'lar
+      const nearMissWidthMin = crashWidthThreshold + 0.3;
+      const nearMissWidthMax = crashWidthThreshold + 1.2;
+      const nearMissDepthThreshold = crashDepthThreshold + 0.8;
       
-      if (!enemy.passed && dz < nearMissDepthThreshold && dz > 1.5 && dx >= crashWidthThreshold && dx < nearMissWidthThreshold) {
+      // Near miss: Yandan geçerken ve minimum mesafeden uzakken
+      if (!enemy.passed && 
+          dz < nearMissDepthThreshold && 
+          dz >= 1.0 && // Minimum distance to count as near miss
+          dx >= nearMissWidthMin && 
+          dx < nearMissWidthMax) {
         updatedEnemies.push({ ...enemy, passed: true });
         triggerNearMiss({ x: enemy.x, y: 1, z: enemy.z });
       } else {
@@ -1267,7 +1279,8 @@ const CameraShake = memo(() => {
   });
   
   useEffect(() => {
-    if (gameState === 'playing') {
+    if (gameState === 'playing' || gameState === 'countdown') {
+      // Reset camera immediately when starting new game
       camera.position.set(0, 4, 8);
       camera.rotation.set(0, 0, 0);
       originalPosition.current = { x: 0, y: 4, z: 8 };
@@ -1275,12 +1288,13 @@ const CameraShake = memo(() => {
   }, [gameState, camera]);
   
   useFrame(() => {
-    if (cameraShake > 0) {
+    if (cameraShake > 0 && gameState === 'gameover') {
       camera.position.x = originalPosition.current.x + (Math.random() - 0.5) * cameraShake * 0.5;
       camera.position.y = originalPosition.current.y + (Math.random() - 0.5) * cameraShake * 0.5;
     } else {
-      camera.position.x = THREE.MathUtils.lerp(camera.position.x, originalPosition.current.x, 0.1);
-      camera.position.y = THREE.MathUtils.lerp(camera.position.y, originalPosition.current.y, 0.1);
+      // Immediately reset position when not shaking
+      camera.position.x = originalPosition.current.x;
+      camera.position.y = originalPosition.current.y;
     }
   });
   
