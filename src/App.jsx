@@ -573,18 +573,18 @@ function MobileControls() {
         onDragStart={preventAll}
         style={{
           position: 'fixed',
-          top: '270px',
-          right: '20px',
-          width: '90px',
-          height: '90px',
+          top: window.innerWidth < 768 ? '160px' : '270px',
+          right: window.innerWidth < 768 ? '10px' : '20px',
+          width: window.innerWidth < 768 ? '60px' : '90px',
+          height: window.innerWidth < 768 ? '60px' : '90px',
           borderRadius: '50%',
           background: 'linear-gradient(135deg, #ff4500 0%, #ff6600 50%, #ff8c00 100%)',
-          border: '4px solid #fff',
+          border: window.innerWidth < 768 ? '3px solid #fff' : '4px solid #fff',
           zIndex: 50,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: '16px',
+          fontSize: window.innerWidth < 768 ? '12px' : '16px',
           color: '#fff',
           fontWeight: 'bold',
           textAlign: 'center',
@@ -1196,36 +1196,48 @@ export default function App() {
 
       {gameState === 'countdown' && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <h1 style={{ fontSize: '150px', color: '#00ff00', textShadow: '0 0 30px #fff', fontStyle: 'italic', fontFamily: 'Arial' }}>{countdown}</h1>
+          <h1 style={{ fontSize: window.innerWidth < 768 ? '80px' : '150px', color: '#00ff00', textShadow: '0 0 30px #fff', fontStyle: 'italic', fontFamily: 'Arial', userSelect: 'none' }}>{countdown}</h1>
         </div>
       )}
 
       {gameState === 'menu' && (
-        <div style={{ position: 'absolute', zIndex: 60, inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)', gap: '20px', userSelect: 'none', WebkitUserSelect: 'none' }}>
-          <h1 style={{ fontSize: '60px', color: '#00ffff', textShadow: '0 0 30px #00ffff', marginBottom: '20px', userSelect: 'none' }}>HIGHWAY RACER</h1>
+        <div style={{ position: 'absolute', zIndex: 60, inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)', gap: window.innerWidth < 768 ? '15px' : '20px', userSelect: 'none', WebkitUserSelect: 'none', padding: '20px' }}>
+          <h1 style={{ fontSize: window.innerWidth < 768 ? '36px' : '60px', color: '#00ffff', textShadow: '0 0 30px #00ffff', marginBottom: window.innerWidth < 768 ? '10px' : '20px', userSelect: 'none', textAlign: 'center' }}>HIGHWAY RACER</h1>
           
-          <button onClick={handleStart} style={{ padding: '20px 60px', fontSize: '30px', background: '#00ff00', color:'#000', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #00ff00', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
+          <button onClick={handleStart} style={{ padding: window.innerWidth < 768 ? '15px 40px' : '20px 60px', fontSize: window.innerWidth < 768 ? '20px' : '30px', background: '#00ff00', color:'#000', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #00ff00', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
             START RACE
           </button>
           
-          <button onClick={() => setShowGarage(!showGarage)} style={{ padding: '15px 40px', fontSize: '20px', background: '#ff00ff', color:'#fff', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #ff00ff', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
+          <button onClick={() => setShowGarage(!showGarage)} style={{ padding: window.innerWidth < 768 ? '12px 30px' : '15px 40px', fontSize: window.innerWidth < 768 ? '16px' : '20px', background: '#ff00ff', color:'#fff', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #ff00ff', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
             {showGarage ? 'CLOSE GARAGE' : 'GARAGE & UPGRADES'}
           </button>
           
-          <button onClick={toggleGyroscope} style={{ padding: '10px 30px', fontSize: '16px', background: useGyroscope ? '#00ff00' : '#666', color:'#fff', border: 'none', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
+          <button onClick={toggleGyroscope} style={{ padding: window.innerWidth < 768 ? '8px 20px' : '10px 30px', fontSize: window.innerWidth < 768 ? '14px' : '16px', background: useGyroscope ? '#00ff00' : '#666', color:'#fff', border: 'none', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
             GYROSCOPE: {useGyroscope ? 'ON' : 'OFF'}
           </button>
           
           {showGarage && (
-            <div style={{ background: 'rgba(0,0,0,0.9)', padding: '30px', borderRadius: '20px', maxWidth: '800px', border: '2px solid #00ffff', userSelect: 'none', WebkitUserSelect: 'none' }}>
-              <h2 style={{ color: '#00ffff', marginBottom: '20px', userSelect: 'none' }}>SELECT CAR</h2>
-              <div style={{ display: 'flex', gap: '20px', marginBottom: '30px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <div style={{ 
+              background: 'rgba(0,0,0,0.9)', 
+              padding: window.innerWidth < 768 ? '15px' : '30px', 
+              borderRadius: '20px', 
+              maxWidth: window.innerWidth < 768 ? '90%' : '800px',
+              width: window.innerWidth < 768 ? '90%' : 'auto',
+              maxHeight: window.innerWidth < 768 ? '70vh' : 'auto',
+              overflowY: window.innerWidth < 768 ? 'auto' : 'visible',
+              border: '2px solid #00ffff', 
+              userSelect: 'none', 
+              WebkitUserSelect: 'none' 
+            }}>
+              <h2 style={{ color: '#00ffff', marginBottom: window.innerWidth < 768 ? '10px' : '20px', userSelect: 'none', fontSize: window.innerWidth < 768 ? '18px' : '24px' }}>SELECT CAR</h2>
+              <div style={{ display: 'flex', gap: window.innerWidth < 768 ? '10px' : '20px', marginBottom: window.innerWidth < 768 ? '15px' : '30px', flexWrap: 'wrap', justifyContent: 'center' }}>
                 {availableCars.map(car => (
                   <button 
                     key={car} 
                     onClick={() => selectCar(car)}
                     style={{ 
-                      padding: '15px 30px', 
+                      padding: window.innerWidth < 768 ? '10px 20px' : '15px 30px',
+                      fontSize: window.innerWidth < 768 ? '14px' : '16px',
                       background: selectedCar === car ? '#00ffff' : '#333', 
                       color: selectedCar === car ? '#000' : '#fff',
                       border: '2px solid #00ffff',
@@ -1244,19 +1256,30 @@ export default function App() {
                 ))}
               </div>
               
-              <h2 style={{ color: '#00ffff', marginBottom: '20px', userSelect: 'none' }}>UPGRADES</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <h2 style={{ color: '#00ffff', marginBottom: window.innerWidth < 768 ? '10px' : '20px', userSelect: 'none', fontSize: window.innerWidth < 768 ? '18px' : '24px' }}>UPGRADES</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: window.innerWidth < 768 ? '10px' : '15px' }}>
                 {['speed', 'control', 'durability'].map(stat => (
-                  <div key={stat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.1)', padding: '15px', borderRadius: '10px', userSelect: 'none' }}>
+                  <div key={stat} style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    background: 'rgba(255,255,255,0.1)', 
+                    padding: window.innerWidth < 768 ? '10px' : '15px',
+                    borderRadius: '10px', 
+                    userSelect: 'none',
+                    flexWrap: window.innerWidth < 768 ? 'wrap' : 'nowrap',
+                    gap: window.innerWidth < 768 ? '10px' : '0'
+                  }}>
                     <div>
-                      <span style={{ color: '#fff', textTransform: 'uppercase', fontWeight: 'bold', userSelect: 'none' }}>{stat}</span>
-                      <span style={{ color: '#00ff00', marginLeft: '10px', userSelect: 'none' }}>Level {upgrades[stat]}/5</span>
+                      <span style={{ color: '#fff', textTransform: 'uppercase', fontWeight: 'bold', userSelect: 'none', fontSize: window.innerWidth < 768 ? '14px' : '16px' }}>{stat}</span>
+                      <span style={{ color: '#00ff00', marginLeft: '10px', userSelect: 'none', fontSize: window.innerWidth < 768 ? '12px' : '14px' }}>Level {upgrades[stat]}/5</span>
                     </div>
                     <button 
                       onClick={() => upgradeStat(stat)}
                       disabled={upgrades[stat] >= 5}
                       style={{ 
-                        padding: '10px 20px',
+                        padding: window.innerWidth < 768 ? '8px 15px' : '10px 20px',
+                        fontSize: window.innerWidth < 768 ? '12px' : '14px',
                         background: upgrades[stat] >= 5 ? '#666' : '#00ff00',
                         color: '#000',
                         border: 'none',
@@ -1280,47 +1303,50 @@ export default function App() {
       )}
 
       {/* HUD - SABİT SCORE */}
-      <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 10, pointerEvents: 'none' }}>
-        <Speedometer speed={speed} />
+      <div style={{ position: 'absolute', top: window.innerWidth < 768 ? 10 : 20, left: window.innerWidth < 768 ? 10 : 20, zIndex: 10, pointerEvents: 'none' }}>
+        <div style={{ transform: window.innerWidth < 768 ? 'scale(0.5)' : 'scale(1)', transformOrigin: 'top left' }}>
+          <Speedometer speed={speed} />
+        </div>
       </div>
       
       <div style={{ 
         position: 'fixed',
-        top: 20, 
-        right: 20, 
+        top: window.innerWidth < 768 ? 10 : 20, 
+        right: window.innerWidth < 768 ? 10 : 20, 
         background: 'linear-gradient(135deg, #333 0%, #000 100%)',
         border: '2px solid #555', 
         borderRadius: '10px', 
-        padding: '10px 30px',
+        padding: window.innerWidth < 768 ? '5px 15px' : '10px 30px',
         transform: 'skewX(-15deg)', 
         zIndex: 10, 
         color: '#fff', 
         textAlign: 'right', 
-        boxShadow: '0 5px 15px rgba(0,0,0,0.5)'
+        boxShadow: '0 5px 15px rgba(0,0,0,0.5)',
+        fontSize: window.innerWidth < 768 ? '0.7em' : '1em'
       }}>
-        <div style={{ fontSize: '12px', ...scoreStyle, transform: 'skewX(15deg)' }}>SCORE</div>
-        <div style={{ fontSize: '40px', ...scoreStyle, transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
+        <div style={{ fontSize: window.innerWidth < 768 ? '10px' : '12px', ...scoreStyle, transform: 'skewX(15deg)' }}>SCORE</div>
+        <div style={{ fontSize: window.innerWidth < 768 ? '24px' : '40px', ...scoreStyle, transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
       </div>
 
       {/* DISTANCE - HAVALI TASARIM */}
       {gameState === 'playing' && (
         <div style={{ 
           position: 'fixed',
-          top: 120, 
-          right: 20, 
+          top: window.innerWidth < 768 ? 60 : 120, 
+          right: window.innerWidth < 768 ? 10 : 20, 
           zIndex: 10
         }}>
           <div style={{ 
             background: 'linear-gradient(135deg, #1a1a2e 0%, #0f0f1a 100%)',
             border: '2px solid #00ffff', 
-            borderRadius: '10px', 
-            padding: '8px 20px',
+            borderRadius: window.innerWidth < 768 ? '5px' : '10px', 
+            padding: window.innerWidth < 768 ? '4px 10px' : '8px 20px',
             transform: 'skewX(-15deg)',
             boxShadow: '0 5px 15px rgba(0,255,255,0.3)'
           }}>
             <div style={{ transform: 'skewX(15deg)', textAlign: 'center' }}>
-              <div style={{ fontSize: '10px', color: '#00ffff', fontWeight: 'bold' }}>DISTANCE</div>
-              <div style={{ fontSize: '24px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #00ffff' }}>{Math.floor(totalDistance)}m</div>
+              <div style={{ fontSize: window.innerWidth < 768 ? '8px' : '10px', color: '#00ffff', fontWeight: 'bold' }}>DISTANCE</div>
+              <div style={{ fontSize: window.innerWidth < 768 ? '16px' : '24px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #00ffff' }}>{Math.floor(totalDistance)}m</div>
             </div>
           </div>
         </div>
@@ -1330,21 +1356,21 @@ export default function App() {
       {gameState === 'playing' && (
         <div style={{ 
           position: 'fixed',
-          top: 190, 
-          right: 20, 
+          top: window.innerWidth < 768 ? 110 : 190, 
+          right: window.innerWidth < 768 ? 10 : 20, 
           zIndex: 10
         }}>
           <div style={{ 
             background: 'linear-gradient(135deg, #2e1a1a 0%, #1a0f0f 100%)',
             border: '2px solid #ff00ff', 
-            borderRadius: '10px', 
-            padding: '8px 20px',
+            borderRadius: window.innerWidth < 768 ? '5px' : '10px', 
+            padding: window.innerWidth < 768 ? '4px 10px' : '8px 20px',
             transform: 'skewX(-15deg)',
             boxShadow: '0 5px 15px rgba(255,0,255,0.3)'
           }}>
             <div style={{ transform: 'skewX(15deg)', textAlign: 'center' }}>
-              <div style={{ fontSize: '10px', color: '#ff00ff', fontWeight: 'bold' }}>NEAR MISS</div>
-              <div style={{ fontSize: '24px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #ff00ff' }}>{nearMissCount}</div>
+              <div style={{ fontSize: window.innerWidth < 768 ? '8px' : '10px', color: '#ff00ff', fontWeight: 'bold' }}>NEAR MISS</div>
+              <div style={{ fontSize: window.innerWidth < 768 ? '16px' : '24px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #ff00ff' }}>{nearMissCount}</div>
             </div>
           </div>
         </div>
@@ -1354,18 +1380,18 @@ export default function App() {
       {gameState === 'playing' && (
         <div style={{
           position: 'fixed',
-          bottom: 30,
-          right: 20,
+          bottom: window.innerWidth < 768 ? 15 : 30,
+          right: window.innerWidth < 768 ? 10 : 20,
           zIndex: 10,
           pointerEvents: 'none'
         }}>
           <div style={{
-            width: '250px',
-            height: '35px',
+            width: window.innerWidth < 768 ? '150px' : '250px',
+            height: window.innerWidth < 768 ? '20px' : '35px',
             background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
-            border: nitro >= 100 ? '3px solid #ff6600' : '3px solid #00ffff',
-            borderRadius: '20px',
-            padding: '4px',
+            border: nitro >= 100 ? '2px solid #ff6600' : '2px solid #00ffff',
+            borderRadius: window.innerWidth < 768 ? '10px' : '20px',
+            padding: window.innerWidth < 768 ? '2px' : '4px',
             boxShadow: nitro >= 100 
               ? '0 5px 20px rgba(255,102,0,0.8), 0 0 30px rgba(255,69,0,0.6)' 
               : '0 5px 20px rgba(0,255,255,0.5)',
@@ -1380,7 +1406,7 @@ export default function App() {
                 : isNitroActive 
                   ? 'linear-gradient(90deg, #0088ff 0%, #00ffff 100%)'
                   : 'linear-gradient(90deg, #00ffff 0%, #0088ff 100%)',
-              borderRadius: '15px',
+              borderRadius: window.innerWidth < 768 ? '8px' : '15px',
               transition: 'width 0.1s ease-out, background 0.3s ease',
               boxShadow: nitro >= 100
                 ? '0 0 30px rgba(255,102,0,1), inset 0 0 20px rgba(255,69,0,0.8)'
@@ -1414,22 +1440,22 @@ export default function App() {
         }
       `}</style>
 
-      {combo > 1 && <div style={{ position: 'absolute', top: 100, left: 30, fontSize: '40px', color: '#00ff00', fontWeight: 'bold', zIndex: 10, textShadow: '0 0 15px lime', userSelect: 'none', WebkitUserSelect: 'none', pointerEvents: 'none' }}>{combo}x COMBO</div>}
+      {combo > 1 && <div style={{ position: 'absolute', top: window.innerWidth < 768 ? 60 : 100, left: window.innerWidth < 768 ? 15 : 30, fontSize: window.innerWidth < 768 ? '24px' : '40px', color: '#00ff00', fontWeight: 'bold', zIndex: 10, textShadow: '0 0 15px lime', userSelect: 'none', WebkitUserSelect: 'none', pointerEvents: 'none' }}>{combo}x COMBO</div>}
       
-      {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: messageColor, fontSize: 'clamp(30px, 8vw, 80px)', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: messageShadow, textTransform: 'uppercase', letterSpacing: '2px', whiteSpace: 'nowrap' }}>{message}</div>}
+      {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: messageColor, fontSize: window.innerWidth < 768 ? 'clamp(20px, 6vw, 50px)' : 'clamp(30px, 8vw, 80px)', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: messageShadow, textTransform: 'uppercase', letterSpacing: '2px', whiteSpace: 'nowrap', userSelect: 'none', WebkitUserSelect: 'none', pointerEvents: 'none' }}>{message}</div>}
 
       {gameOver && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(50,0,0,0.95)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Arial', userSelect: 'none', WebkitUserSelect: 'none' }}>
-          <h1 style={{ fontSize: 'clamp(40px, 10vw, 80px)', color: '#ff0000', margin: '0 0 20px 0', textShadow: '0 0 30px red', textTransform: 'uppercase', textAlign: 'center', userSelect: 'none' }}>YOU CRASHED</h1>
-          <h2 style={{ color: '#fff', fontSize: '30px', marginBottom: '20px', userSelect: 'none' }}>FINAL SCORE: {Math.floor(score)}</h2>
-          <div style={{ color: '#00ffff', fontSize: '20px', marginBottom: '40px', userSelect: 'none' }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(50,0,0,0.95)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Arial', userSelect: 'none', WebkitUserSelect: 'none', padding: '20px' }}>
+          <h1 style={{ fontSize: window.innerWidth < 768 ? 'clamp(30px, 8vw, 50px)' : 'clamp(40px, 10vw, 80px)', color: '#ff0000', margin: '0 0 20px 0', textShadow: '0 0 30px red', textTransform: 'uppercase', textAlign: 'center', userSelect: 'none' }}>YOU CRASHED</h1>
+          <h2 style={{ color: '#fff', fontSize: window.innerWidth < 768 ? '20px' : '30px', marginBottom: window.innerWidth < 768 ? '15px' : '20px', userSelect: 'none' }}>FINAL SCORE: {Math.floor(score)}</h2>
+          <div style={{ color: '#00ffff', fontSize: window.innerWidth < 768 ? '16px' : '20px', marginBottom: window.innerWidth < 768 ? '30px' : '40px', userSelect: 'none', textAlign: 'center' }}>
             <div>Distance: {Math.floor(totalDistance)}m</div>
             <div>Near Misses: {nearMissCount}</div>
           </div>
           
-          <div style={{ display: 'flex', gap: '20px' }}>
-            <button onClick={startGame} style={{ padding: '20px 40px', fontSize: '24px', cursor: 'pointer', background: '#fff', color: '#000', border: 'none', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', boxShadow: '0 0 20px white', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>RESTART</button>
-            <button onClick={quitGame} style={{ padding: '20px 40px', fontSize: '24px', cursor: 'pointer', background: '#333', color: '#fff', border: '1px solid #666', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>QUIT</button>
+          <div style={{ display: 'flex', gap: window.innerWidth < 768 ? '15px' : '20px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button onClick={startGame} style={{ padding: window.innerWidth < 768 ? '15px 30px' : '20px 40px', fontSize: window.innerWidth < 768 ? '18px' : '24px', cursor: 'pointer', background: '#fff', color: '#000', border: 'none', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', boxShadow: '0 0 20px white', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>RESTART</button>
+            <button onClick={quitGame} style={{ padding: window.innerWidth < 768 ? '15px 30px' : '20px 40px', fontSize: window.innerWidth < 768 ? '18px' : '24px', cursor: 'pointer', background: '#333', color: '#fff', border: '1px solid #666', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>QUIT</button>
           </div>
         </div>
       )}
