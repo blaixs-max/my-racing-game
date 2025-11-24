@@ -563,7 +563,7 @@ function MobileControls() {
         {...handlers(1)}
       />
       
-      {/* Nitro Butonu - Near Miss'in altında */}
+      {/* Nitro Butonu - Sağ alt köşede */}
       <div
         onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); activateNitro(); }}
         onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); deactivateNitro(); }}
@@ -573,22 +573,22 @@ function MobileControls() {
         onDragStart={preventAll}
         style={{
           position: 'fixed',
-          top: window.innerWidth < 768 ? '160px' : '270px',
-          right: window.innerWidth < 768 ? '10px' : '20px',
-          width: window.innerWidth < 768 ? '60px' : '90px',
-          height: window.innerWidth < 768 ? '60px' : '90px',
+          bottom: window.innerWidth < 768 ? '20px' : '30px',
+          right: window.innerWidth < 768 ? '20px' : '30px',
+          width: window.innerWidth < 768 ? '70px' : '100px',
+          height: window.innerWidth < 768 ? '70px' : '100px',
           borderRadius: '50%',
           background: 'linear-gradient(135deg, #ff4500 0%, #ff6600 50%, #ff8c00 100%)',
-          border: window.innerWidth < 768 ? '3px solid #fff' : '4px solid #fff',
+          border: window.innerWidth < 768 ? '4px solid #fff' : '5px solid #fff',
           zIndex: 50,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: window.innerWidth < 768 ? '12px' : '16px',
+          fontSize: window.innerWidth < 768 ? '14px' : '18px',
           color: '#fff',
           fontWeight: 'bold',
           textAlign: 'center',
-          boxShadow: '0 5px 20px rgba(255,69,0,0.9)',
+          boxShadow: '0 5px 30px rgba(255,69,0,0.9)',
           cursor: 'pointer',
           touchAction: 'none',
           userSelect: 'none',
@@ -1044,13 +1044,21 @@ function RoadEnvironment() {
 function CameraShake() {
   const { cameraShake, gameState } = useGameStore();
   const { camera } = useThree();
-  const originalPosition = useRef({ x: 0, y: 6, z: 14 });
+  const isMobile = window.innerWidth < 768;
+  const originalPosition = useRef({ 
+    x: 0, 
+    y: isMobile ? 5 : 6, 
+    z: isMobile ? 10 : 14 
+  });
   
-  // Restart sonrası kamera pozisyonunu sıfırla
+  // Restart sonrası kamera pozisyonunu sıfırla - responsive
   useEffect(() => {
     if (gameState === 'playing') {
-      camera.position.set(0, 6, 14);
+      const posY = window.innerWidth < 768 ? 5 : 6;
+      const posZ = window.innerWidth < 768 ? 10 : 14;
+      camera.position.set(0, posY, posZ);
       camera.rotation.set(0, 0, 0);
+      originalPosition.current = { x: 0, y: posY, z: posZ };
     }
   }, [gameState, camera]);
   
@@ -1376,48 +1384,70 @@ export default function App() {
         </div>
       )}
 
-      {/* NITRO BAR - Sağ altta */}
+      {/* NITRO BAR - Üstte Ortalanmış, N2O Tasarımı */}
       {gameState === 'playing' && (
         <div style={{
           position: 'fixed',
-          bottom: window.innerWidth < 768 ? 15 : 30,
-          right: window.innerWidth < 768 ? 10 : 20,
+          top: window.innerWidth < 768 ? 10 : 20,
+          left: '50%',
+          transform: 'translateX(-50%)',
           zIndex: 10,
           pointerEvents: 'none'
         }}>
           <div style={{
-            width: window.innerWidth < 768 ? '150px' : '250px',
-            height: window.innerWidth < 768 ? '20px' : '35px',
+            width: window.innerWidth < 768 ? '200px' : '300px',
+            height: window.innerWidth < 768 ? '50px' : '70px',
             background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
-            border: nitro >= 100 ? '2px solid #ff6600' : '2px solid #00ffff',
-            borderRadius: window.innerWidth < 768 ? '10px' : '20px',
-            padding: window.innerWidth < 768 ? '2px' : '4px',
+            border: nitro >= 100 ? '3px solid #ff6600' : '3px solid #ff9933',
+            borderRadius: window.innerWidth < 768 ? '25px' : '35px',
+            padding: window.innerWidth < 768 ? '3px' : '5px',
             boxShadow: nitro >= 100 
-              ? '0 5px 20px rgba(255,102,0,0.8), 0 0 30px rgba(255,69,0,0.6)' 
-              : '0 5px 20px rgba(0,255,255,0.5)',
+              ? '0 5px 30px rgba(255,102,0,0.9), 0 0 40px rgba(255,69,0,0.7)' 
+              : '0 5px 20px rgba(255,153,51,0.6)',
             position: 'relative',
             overflow: 'hidden'
           }}>
+            {/* N2O Yazısı */}
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              fontSize: window.innerWidth < 768 ? '20px' : '30px',
+              fontWeight: 'bold',
+              color: nitro >= 100 ? '#fff' : '#666',
+              zIndex: 2,
+              textShadow: nitro >= 100 ? '0 0 10px #fff, 0 0 20px #ff6600' : 'none',
+              fontFamily: 'Impact, Arial Black, sans-serif',
+              letterSpacing: '2px',
+              userSelect: 'none',
+              pointerEvents: 'none'
+            }}>
+              N2O
+            </div>
+            
+            {/* Dolum Bar */}
             <div style={{
               width: `${(nitro / maxNitro) * 100}%`,
               height: '100%',
               background: nitro >= 100
-                ? 'linear-gradient(90deg, #ff4500 0%, #ff6600 50%, #ff8c00 100%)' // Ateş rengi
+                ? 'linear-gradient(90deg, #ff4500 0%, #ff6600 50%, #ff8c00 100%)' 
                 : isNitroActive 
-                  ? 'linear-gradient(90deg, #0088ff 0%, #00ffff 100%)'
-                  : 'linear-gradient(90deg, #00ffff 0%, #0088ff 100%)',
-              borderRadius: window.innerWidth < 768 ? '8px' : '15px',
+                  ? 'linear-gradient(90deg, #ff9933 0%, #ffaa55 100%)'
+                  : 'linear-gradient(90deg, #ff9933 0%, #ff7722 100%)',
+              borderRadius: window.innerWidth < 768 ? '22px' : '30px',
               transition: 'width 0.1s ease-out, background 0.3s ease',
               boxShadow: nitro >= 100
                 ? '0 0 30px rgba(255,102,0,1), inset 0 0 20px rgba(255,69,0,0.8)'
                 : isNitroActive 
-                  ? '0 0 20px #00ffff' 
-                  : '0 0 10px #00ffff',
+                  ? '0 0 20px rgba(255,153,51,0.8)' 
+                  : '0 0 10px rgba(255,153,51,0.5)',
               animation: nitro >= 100 
                 ? 'fireGlow 0.5s ease-in-out infinite' 
                 : isNitroActive 
                   ? 'nitroFlash 0.3s ease-in-out infinite' 
-                  : 'none'
+                  : 'none',
+              zIndex: 1
             }} />
           </div>
         </div>
@@ -1466,7 +1496,11 @@ export default function App() {
         gl={{ antialias: false, powerPreference: "high-performance" }}
         frameloop="always"
       >
-        <PerspectiveCamera makeDefault position={[0, 6, 14]} fov={55} />
+        <PerspectiveCamera 
+          makeDefault 
+          position={window.innerWidth < 768 ? [0, 5, 10] : [0, 6, 14]} 
+          fov={window.innerWidth < 768 ? 60 : 55} 
+        />
         <ambientLight intensity={0.6} color="#ffffff" /> 
         <hemisphereLight skyColor="#445566" groundColor="#223344" intensity={0.6} />
         <Suspense fallback={null}>
