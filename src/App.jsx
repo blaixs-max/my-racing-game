@@ -573,18 +573,18 @@ function MobileControls() {
         onDragStart={preventAll}
         style={{
           position: 'fixed',
-          bottom: window.innerWidth < 768 ? '20px' : '30px',
-          right: window.innerWidth < 768 ? '20px' : '30px',
-          width: window.innerWidth < 768 ? '70px' : '100px',
-          height: window.innerWidth < 768 ? '70px' : '100px',
+          bottom: window.innerWidth < 768 ? '15px' : '30px',
+          right: window.innerWidth < 768 ? '15px' : '30px',
+          width: window.innerWidth < 768 ? '55px' : '100px',
+          height: window.innerWidth < 768 ? '55px' : '100px',
           borderRadius: '50%',
           background: 'linear-gradient(135deg, #ff4500 0%, #ff6600 50%, #ff8c00 100%)',
-          border: window.innerWidth < 768 ? '4px solid #fff' : '5px solid #fff',
+          border: window.innerWidth < 768 ? '3px solid #fff' : '5px solid #fff',
           zIndex: 50,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: window.innerWidth < 768 ? '14px' : '18px',
+          fontSize: window.innerWidth < 768 ? '10px' : '18px',
           color: '#fff',
           fontWeight: 'bold',
           textAlign: 'center',
@@ -730,11 +730,31 @@ function PlayerCar() {
       const dx = Math.abs(group.current.position.x - enemy.x);
       const dz = Math.abs(enemy.z - (-2)); 
       
-      if (dz < crashThresholdZ && dx < crashThresholdX) {
+      // Araç tipine göre çarpışma mesafesi
+      let crashWidthThreshold = crashThresholdX;
+      let crashDepthThreshold = crashThresholdZ;
+      
+      if (enemy.type === 'truck') {
+        crashWidthThreshold = 2.3; // Kamyon daha geniş
+        crashDepthThreshold = 5.5; // Kamyon daha uzun
+      } else if (enemy.type === 'bus') {
+        crashWidthThreshold = 2.4; // Otobüs daha geniş
+        crashDepthThreshold = 6.5; // Otobüs çok uzun
+      } else if (enemy.type === 'sedan' || enemy.type === 'sport' || enemy.type === 'police') {
+        crashWidthThreshold = 1.8; // Normal araçlar daha dar
+        crashDepthThreshold = 3.5;
+      } else if (enemy.type === 'ambulance') {
+        crashWidthThreshold = 2.1;
+        crashDepthThreshold = 4.5;
+      }
+      
+      // ÇARPISMA kontrolü - daha hassas
+      if (dz < crashDepthThreshold && dx < crashWidthThreshold) {
         setGameOver();
       }
       
-      if (!enemy.passed && dz < nearMissThresholdZ && dx >= crashThresholdX && dx < nearMissThresholdX) {
+      // NEAR MISS kontrolü - sadece geçerken ve çarpmadan
+      if (!enemy.passed && dz < nearMissThresholdZ && dz > 1.5 && dx >= crashWidthThreshold && dx < nearMissThresholdX) {
         enemy.passed = true; 
         triggerNearMiss({ x: enemy.x, y: 1, z: enemy.z });   
       }
@@ -1417,50 +1437,50 @@ export default function App() {
       )}
 
       {/* HUD - SABİT SCORE */}
-      <div style={{ position: 'absolute', top: window.innerWidth < 768 ? 5 : 20, left: window.innerWidth < 768 ? 5 : 20, zIndex: 10, pointerEvents: 'none' }}>
-        <div style={{ transform: window.innerWidth < 768 ? 'scale(0.45)' : 'scale(1)', transformOrigin: 'top left' }}>
+      <div style={{ position: 'absolute', top: window.innerWidth < 768 ? 3 : 20, left: window.innerWidth < 768 ? 3 : 20, zIndex: 10, pointerEvents: 'none' }}>
+        <div style={{ transform: window.innerWidth < 768 ? 'scale(0.35)' : 'scale(1)', transformOrigin: 'top left' }}>
           <Speedometer speed={speed} />
         </div>
       </div>
       
       <div style={{ 
         position: 'fixed',
-        top: window.innerWidth < 768 ? 10 : 20, 
-        right: window.innerWidth < 768 ? 10 : 20, 
+        top: window.innerWidth < 768 ? 5 : 20, 
+        right: window.innerWidth < 768 ? 5 : 20, 
         background: 'linear-gradient(135deg, #333 0%, #000 100%)',
         border: '2px solid #555', 
-        borderRadius: '10px', 
-        padding: window.innerWidth < 768 ? '5px 15px' : '10px 30px',
+        borderRadius: window.innerWidth < 768 ? '5px' : '10px', 
+        padding: window.innerWidth < 768 ? '3px 8px' : '10px 30px',
         transform: 'skewX(-15deg)', 
         zIndex: 10, 
         color: '#fff', 
         textAlign: 'right', 
         boxShadow: '0 5px 15px rgba(0,0,0,0.5)',
-        fontSize: window.innerWidth < 768 ? '0.7em' : '1em'
+        fontSize: window.innerWidth < 768 ? '0.6em' : '1em'
       }}>
-        <div style={{ fontSize: window.innerWidth < 768 ? '10px' : '12px', ...scoreStyle, transform: 'skewX(15deg)' }}>SCORE</div>
-        <div style={{ fontSize: window.innerWidth < 768 ? '24px' : '40px', ...scoreStyle, transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
+        <div style={{ fontSize: window.innerWidth < 768 ? '8px' : '12px', ...scoreStyle, transform: 'skewX(15deg)' }}>SCORE</div>
+        <div style={{ fontSize: window.innerWidth < 768 ? '16px' : '40px', ...scoreStyle, transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
       </div>
 
       {/* DISTANCE - HAVALI TASARIM */}
       {gameState === 'playing' && (
         <div style={{ 
           position: 'fixed',
-          top: window.innerWidth < 768 ? 60 : 120, 
-          right: window.innerWidth < 768 ? 10 : 20, 
+          top: window.innerWidth < 768 ? 35 : 120, 
+          right: window.innerWidth < 768 ? 5 : 20, 
           zIndex: 10
         }}>
           <div style={{ 
             background: 'linear-gradient(135deg, #1a1a2e 0%, #0f0f1a 100%)',
             border: '2px solid #00ffff', 
-            borderRadius: window.innerWidth < 768 ? '5px' : '10px', 
-            padding: window.innerWidth < 768 ? '4px 10px' : '8px 20px',
+            borderRadius: window.innerWidth < 768 ? '4px' : '10px', 
+            padding: window.innerWidth < 768 ? '3px 8px' : '8px 20px',
             transform: 'skewX(-15deg)',
             boxShadow: '0 5px 15px rgba(0,255,255,0.3)'
           }}>
             <div style={{ transform: 'skewX(15deg)', textAlign: 'center' }}>
-              <div style={{ fontSize: window.innerWidth < 768 ? '8px' : '10px', color: '#00ffff', fontWeight: 'bold' }}>DISTANCE</div>
-              <div style={{ fontSize: window.innerWidth < 768 ? '16px' : '24px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #00ffff' }}>{Math.floor(totalDistance)}m</div>
+              <div style={{ fontSize: window.innerWidth < 768 ? '7px' : '10px', color: '#00ffff', fontWeight: 'bold' }}>DISTANCE</div>
+              <div style={{ fontSize: window.innerWidth < 768 ? '12px' : '24px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #00ffff' }}>{Math.floor(totalDistance)}m</div>
             </div>
           </div>
         </div>
@@ -1470,21 +1490,21 @@ export default function App() {
       {gameState === 'playing' && (
         <div style={{ 
           position: 'fixed',
-          top: window.innerWidth < 768 ? 110 : 190, 
-          right: window.innerWidth < 768 ? 10 : 20, 
+          top: window.innerWidth < 768 ? 62 : 190, 
+          right: window.innerWidth < 768 ? 5 : 20, 
           zIndex: 10
         }}>
           <div style={{ 
             background: 'linear-gradient(135deg, #2e1a1a 0%, #1a0f0f 100%)',
             border: '2px solid #ff00ff', 
-            borderRadius: window.innerWidth < 768 ? '5px' : '10px', 
-            padding: window.innerWidth < 768 ? '4px 10px' : '8px 20px',
+            borderRadius: window.innerWidth < 768 ? '4px' : '10px', 
+            padding: window.innerWidth < 768 ? '3px 8px' : '8px 20px',
             transform: 'skewX(-15deg)',
             boxShadow: '0 5px 15px rgba(255,0,255,0.3)'
           }}>
             <div style={{ transform: 'skewX(15deg)', textAlign: 'center' }}>
-              <div style={{ fontSize: window.innerWidth < 768 ? '8px' : '10px', color: '#ff00ff', fontWeight: 'bold' }}>NEAR MISS</div>
-              <div style={{ fontSize: window.innerWidth < 768 ? '16px' : '24px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #ff00ff' }}>{nearMissCount}</div>
+              <div style={{ fontSize: window.innerWidth < 768 ? '7px' : '10px', color: '#ff00ff', fontWeight: 'bold' }}>NEAR MISS</div>
+              <div style={{ fontSize: window.innerWidth < 768 ? '12px' : '24px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #ff00ff' }}>{nearMissCount}</div>
             </div>
           </div>
         </div>
@@ -1494,19 +1514,19 @@ export default function App() {
       {gameState === 'playing' && (
         <div style={{
           position: 'fixed',
-          top: window.innerWidth < 768 ? 10 : 20,
+          top: window.innerWidth < 768 ? 5 : 20,
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 10,
           pointerEvents: 'none'
         }}>
           <div style={{
-            width: window.innerWidth < 768 ? '200px' : '300px',
-            height: window.innerWidth < 768 ? '50px' : '70px',
+            width: window.innerWidth < 768 ? '140px' : '300px',
+            height: window.innerWidth < 768 ? '35px' : '70px',
             background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
-            border: nitro >= 100 ? '3px solid #ff6600' : '3px solid #ff9933',
-            borderRadius: window.innerWidth < 768 ? '25px' : '35px',
-            padding: window.innerWidth < 768 ? '3px' : '5px',
+            border: nitro >= 100 ? '2px solid #ff6600' : '2px solid #ff9933',
+            borderRadius: window.innerWidth < 768 ? '18px' : '35px',
+            padding: window.innerWidth < 768 ? '2px' : '5px',
             boxShadow: nitro >= 100 
               ? '0 5px 30px rgba(255,102,0,0.9), 0 0 40px rgba(255,69,0,0.7)' 
               : '0 5px 20px rgba(255,153,51,0.6)',
@@ -1519,7 +1539,7 @@ export default function App() {
               top: '50%',
               left: '50%',
               transform: 'translate(-50%, -50%)',
-              fontSize: window.innerWidth < 768 ? '20px' : '30px',
+              fontSize: window.innerWidth < 768 ? '14px' : '30px',
               fontWeight: 'bold',
               color: nitro >= 100 ? '#fff' : '#666',
               zIndex: 2,
@@ -1541,7 +1561,7 @@ export default function App() {
                 : isNitroActive 
                   ? 'linear-gradient(90deg, #ff9933 0%, #ffaa55 100%)'
                   : 'linear-gradient(90deg, #ff9933 0%, #ff7722 100%)',
-              borderRadius: window.innerWidth < 768 ? '22px' : '30px',
+              borderRadius: window.innerWidth < 768 ? '15px' : '30px',
               transition: 'width 0.1s ease-out, background 0.3s ease',
               boxShadow: nitro >= 100
                 ? '0 0 30px rgba(255,102,0,1), inset 0 0 20px rgba(255,69,0,0.8)'
@@ -1576,9 +1596,29 @@ export default function App() {
         }
       `}</style>
 
-      {combo > 1 && <div style={{ position: 'absolute', top: window.innerWidth < 768 ? 90 : 100, left: window.innerWidth < 768 ? '50%' : 30, transform: window.innerWidth < 768 ? 'translateX(-50%)' : 'none', fontSize: window.innerWidth < 768 ? '20px' : '40px', color: '#00ff00', fontWeight: 'bold', zIndex: 10, textShadow: '0 0 15px lime', userSelect: 'none', WebkitUserSelect: 'none', pointerEvents: 'none' }}>{combo}x COMBO</div>}
+      {combo > 1 && (
+        <div style={{ 
+          position: 'absolute', 
+          top: window.innerWidth < 768 ? 15 : 25, 
+          right: window.innerWidth < 768 ? 10 : 20, 
+          fontSize: window.innerWidth < 768 ? '18px' : '32px', 
+          color: '#00ff00', 
+          fontWeight: 'bold', 
+          zIndex: 10, 
+          textShadow: '0 0 15px lime', 
+          userSelect: 'none', 
+          WebkitUserSelect: 'none', 
+          pointerEvents: 'none',
+          background: 'rgba(0,0,0,0.5)',
+          padding: window.innerWidth < 768 ? '5px 10px' : '8px 15px',
+          borderRadius: '10px',
+          border: '2px solid #00ff00'
+        }}>
+          {combo}x COMBO
+        </div>
+      )}
       
-      {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: messageColor, fontSize: window.innerWidth < 768 ? 'clamp(20px, 6vw, 50px)' : 'clamp(30px, 8vw, 80px)', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: messageShadow, textTransform: 'uppercase', letterSpacing: '2px', whiteSpace: 'nowrap', userSelect: 'none', WebkitUserSelect: 'none', pointerEvents: 'none' }}>{message}</div>}
+      {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: messageColor, fontSize: window.innerWidth < 768 ? 'clamp(16px, 5vw, 36px)' : 'clamp(30px, 8vw, 80px)', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: messageShadow, textTransform: 'uppercase', letterSpacing: '2px', whiteSpace: 'nowrap', userSelect: 'none', WebkitUserSelect: 'none', pointerEvents: 'none' }}>{message}</div>}
 
       {gameOver && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(50,0,0,0.95)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Arial', userSelect: 'none', WebkitUserSelect: 'none', padding: '20px' }}>
