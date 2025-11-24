@@ -1047,15 +1047,15 @@ function CameraShake() {
   const isMobile = window.innerWidth < 768;
   const originalPosition = useRef({ 
     x: 0, 
-    y: isMobile ? 5 : 6, 
-    z: isMobile ? 10 : 14 
+    y: isMobile ? 4 : 6, 
+    z: isMobile ? 8 : 14 
   });
   
   // Restart sonrası kamera pozisyonunu sıfırla - responsive
   useEffect(() => {
     if (gameState === 'playing') {
-      const posY = window.innerWidth < 768 ? 5 : 6;
-      const posZ = window.innerWidth < 768 ? 10 : 14;
+      const posY = window.innerWidth < 768 ? 4 : 6;
+      const posZ = window.innerWidth < 768 ? 8 : 14;
       camera.position.set(0, posY, posZ);
       camera.rotation.set(0, 0, 0);
       originalPosition.current = { x: 0, y: posY, z: posZ };
@@ -1098,6 +1098,61 @@ export default function App() {
   } = useGameStore();
   
   const [showGarage, setShowGarage] = useState(false);
+  
+  // iOS Tam Ekran Meta Tags
+  useEffect(() => {
+    // Viewport meta tag
+    let metaViewport = document.querySelector('meta[name=viewport]');
+    if (!metaViewport) {
+      metaViewport = document.createElement('meta');
+      metaViewport.name = 'viewport';
+      document.head.appendChild(metaViewport);
+    }
+    metaViewport.setAttribute('content', 
+      'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover'
+    );
+    
+    // Apple mobile web app capable
+    let metaApple = document.querySelector('meta[name=apple-mobile-web-app-capable]');
+    if (!metaApple) {
+      metaApple = document.createElement('meta');
+      metaApple.name = 'apple-mobile-web-app-capable';
+      metaApple.content = 'yes';
+      document.head.appendChild(metaApple);
+    }
+    
+    // Apple status bar style
+    let metaStatus = document.querySelector('meta[name=apple-mobile-web-app-status-bar-style]');
+    if (!metaStatus) {
+      metaStatus = document.createElement('meta');
+      metaStatus.name = 'apple-mobile-web-app-status-bar-style';
+      metaStatus.content = 'black-translucent';
+      document.head.appendChild(metaStatus);
+    }
+    
+    // Mobile web app capable
+    let metaMobile = document.querySelector('meta[name=mobile-web-app-capable]');
+    if (!metaMobile) {
+      metaMobile = document.createElement('meta');
+      metaMobile.name = 'mobile-web-app-capable';
+      metaMobile.content = 'yes';
+      document.head.appendChild(metaMobile);
+    }
+    
+    // iOS scroll engelleme
+    const preventScroll = (e) => {
+      e.preventDefault();
+      window.scrollTo(0, 0);
+    };
+    
+    window.addEventListener('scroll', preventScroll, { passive: false });
+    document.body.addEventListener('touchmove', preventScroll, { passive: false });
+    
+    return () => {
+      window.removeEventListener('scroll', preventScroll);
+      document.body.removeEventListener('touchmove', preventScroll);
+    };
+  }, []);
   
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -1147,24 +1202,48 @@ export default function App() {
 
   const handleStart = () => {
     const elem = document.documentElement;
+    
+    // iOS Safari için özel viewport ayarı
+    const metaViewport = document.querySelector('meta[name=viewport]');
+    if (metaViewport) {
+      metaViewport.setAttribute('content', 
+        'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, minimal-ui'
+      );
+    }
+    
+    // Fullscreen request
     if (elem.requestFullscreen) {
       elem.requestFullscreen().catch(err => console.log(err));
     } else if (elem.webkitRequestFullscreen) {
       elem.webkitRequestFullscreen();
+    } else if (elem.webkitEnterFullscreen) {
+      // iOS için
+      elem.webkitEnterFullscreen();
     }
+    
+    // iOS için scroll engelleme
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+    
     startGame();
   }
 
   return (
     <div style={{ 
       width: '100vw', 
-      height: '100vh', 
+      height: '100vh',
+      height: '100dvh', // Dynamic viewport height for mobile
       background: '#0a0a15', 
       overflow: 'hidden',
       userSelect: 'none',
       WebkitUserSelect: 'none',
       WebkitTouchCallout: 'none',
-      touchAction: 'manipulation'
+      touchAction: 'manipulation',
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      margin: 0,
+      padding: 0
     }}>
       
       <style>{`
@@ -1182,6 +1261,33 @@ export default function App() {
           position: fixed;
           width: 100%;
           height: 100%;
+          margin: 0;
+          padding: 0;
+        }
+        
+        /* iOS tam ekran ve home indicator gizleme */
+        @supports (-webkit-touch-callout: none) {
+          body {
+            /* iOS için safe area padding */
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+            padding-left: env(safe-area-inset-left);
+            padding-right: env(safe-area-inset-right);
+            
+            /* Home indicator gizleme */
+            -webkit-overflow-scrolling: touch;
+          }
+        }
+        
+        /* Canvas tam ekran */
+        canvas {
+          display: block;
+          width: 100vw !important;
+          height: 100vh !important;
+          height: 100dvh !important; /* Dynamic viewport height for mobile */
+          position: fixed;
+          top: 0;
+          left: 0;
         }
         
         input, textarea {
@@ -1311,8 +1417,8 @@ export default function App() {
       )}
 
       {/* HUD - SABİT SCORE */}
-      <div style={{ position: 'absolute', top: window.innerWidth < 768 ? 10 : 20, left: window.innerWidth < 768 ? 10 : 20, zIndex: 10, pointerEvents: 'none' }}>
-        <div style={{ transform: window.innerWidth < 768 ? 'scale(0.5)' : 'scale(1)', transformOrigin: 'top left' }}>
+      <div style={{ position: 'absolute', top: window.innerWidth < 768 ? 5 : 20, left: window.innerWidth < 768 ? 5 : 20, zIndex: 10, pointerEvents: 'none' }}>
+        <div style={{ transform: window.innerWidth < 768 ? 'scale(0.45)' : 'scale(1)', transformOrigin: 'top left' }}>
           <Speedometer speed={speed} />
         </div>
       </div>
@@ -1470,7 +1576,7 @@ export default function App() {
         }
       `}</style>
 
-      {combo > 1 && <div style={{ position: 'absolute', top: window.innerWidth < 768 ? 60 : 100, left: window.innerWidth < 768 ? 15 : 30, fontSize: window.innerWidth < 768 ? '24px' : '40px', color: '#00ff00', fontWeight: 'bold', zIndex: 10, textShadow: '0 0 15px lime', userSelect: 'none', WebkitUserSelect: 'none', pointerEvents: 'none' }}>{combo}x COMBO</div>}
+      {combo > 1 && <div style={{ position: 'absolute', top: window.innerWidth < 768 ? 90 : 100, left: window.innerWidth < 768 ? '50%' : 30, transform: window.innerWidth < 768 ? 'translateX(-50%)' : 'none', fontSize: window.innerWidth < 768 ? '20px' : '40px', color: '#00ff00', fontWeight: 'bold', zIndex: 10, textShadow: '0 0 15px lime', userSelect: 'none', WebkitUserSelect: 'none', pointerEvents: 'none' }}>{combo}x COMBO</div>}
       
       {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: messageColor, fontSize: window.innerWidth < 768 ? 'clamp(20px, 6vw, 50px)' : 'clamp(30px, 8vw, 80px)', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: messageShadow, textTransform: 'uppercase', letterSpacing: '2px', whiteSpace: 'nowrap', userSelect: 'none', WebkitUserSelect: 'none', pointerEvents: 'none' }}>{message}</div>}
 
@@ -1498,8 +1604,8 @@ export default function App() {
       >
         <PerspectiveCamera 
           makeDefault 
-          position={window.innerWidth < 768 ? [0, 5, 10] : [0, 6, 14]} 
-          fov={window.innerWidth < 768 ? 60 : 55} 
+          position={window.innerWidth < 768 ? [0, 4, 8] : [0, 6, 14]} 
+          fov={window.innerWidth < 768 ? 65 : 55} 
         />
         <ambientLight intensity={0.6} color="#ffffff" /> 
         <hemisphereLight skyColor="#445566" groundColor="#223344" intensity={0.6} />
