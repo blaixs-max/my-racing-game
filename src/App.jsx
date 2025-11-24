@@ -172,15 +172,6 @@ const useGameStore = create((set, get) => ({
   nitroRegenRate: 5,
   
   selectedCar: 'default',
-  availableCars: ['default', 'sport', 'muscle'],
-  upgrades: {
-    speed: 1,
-    control: 1,
-    durability: 1
-  },
-  
-  useGyroscope: false,
-  gyroPermission: false,
   
   roadSegments: [],
   currentRoadType: 'straight',
@@ -260,36 +251,13 @@ const useGameStore = create((set, get) => ({
     });
   },
   
-  selectCar: (carType) => set({ selectedCar: carType }),
-  
-  upgradeStat: (stat) => set((state) => {
-    const cost = state.upgrades[stat] * 1000;
-    if (state.score >= cost && state.upgrades[stat] < 5) {
-      return {
-        upgrades: { ...state.upgrades, [stat]: state.upgrades[stat] + 1 },
-        score: state.score - cost
-      };
-    }
-    return {};
-  }),
-  
   steer: (direction) => set((state) => {
     if (state.gameState !== 'playing') return {};
-    const controlBonus = state.upgrades.control * 0.2;
-    const step = 1.25 + controlBonus;
+    const step = 1.25;
     let newX = state.targetX + (direction * step);
     newX = Math.max(-5.0, Math.min(5.0, newX));
     return { targetX: newX };
   }),
-  
-  setGyroX: (x) => set((state) => {
-    if (state.gameState !== 'playing' || !state.useGyroscope) return {};
-    let newX = x * 5;
-    newX = Math.max(-5.0, Math.min(5.0, newX));
-    return { targetX: newX };
-  }),
-  
-  toggleGyroscope: () => set((state) => ({ useGyroscope: !state.useGyroscope })),
   
   activateNitro: () => set((state) => {
     if (state.gameState !== 'playing' || state.nitro <= 0) return {};
@@ -367,8 +335,7 @@ const useGameStore = create((set, get) => ({
     
     if (state.isNitroActive && state.nitro > 0) {
       newNitro = Math.max(0, state.nitro - delta * 25);
-      const speedBonus = state.upgrades.speed * 5;
-      newTargetSpeed = 150 + speedBonus;
+      newTargetSpeed = 150;
       
       if (newNitro <= 0) {
         set({ isNitroActive: false });
@@ -724,49 +691,6 @@ const MobileControls = memo(() => {
 
 MobileControls.displayName = 'MobileControls';
 
-// ==================== GYROSCOPE ====================
-const GyroscopeHandler = memo(() => {
-  const useGyroscope = useGameStore(state => state.useGyroscope);
-  const gameState = useGameStore(state => state.gameState);
-  const setGyroX = useGameStore(state => state.setGyroX);
-  
-  useEffect(() => {
-    if (!useGyroscope || gameState !== 'playing') return;
-    
-    const handleOrientation = (event) => {
-      if (event.gamma !== null) {
-        const tilt = event.gamma / 45;
-        setGyroX(-tilt);
-      }
-    };
-    
-    const requestPermission = async () => {
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        try {
-          const permission = await DeviceOrientationEvent.requestPermission();
-          if (permission === 'granted') {
-            window.addEventListener('deviceorientation', handleOrientation);
-          }
-        } catch (e) {
-          console.log('Gyro permission denied');
-        }
-      } else {
-        window.addEventListener('deviceorientation', handleOrientation);
-      }
-    };
-    
-    requestPermission();
-    
-    return () => {
-      window.removeEventListener('deviceorientation', handleOrientation);
-    };
-  }, [useGyroscope, gameState, setGyroX]);
-  
-  return null;
-});
-
-GyroscopeHandler.displayName = 'GyroscopeHandler';
-
 // ==================== HIZ GÖSTERGESİ ====================
 const Speedometer = memo(({ speed }) => {
   const maxSpeed = 200;
@@ -814,7 +738,7 @@ const VEHICLE_DIMENSIONS = {
 };
 
 function PlayerCar() {
-  const { targetX, enemies, coins, setGameOver, gameOver, triggerNearMiss, collectCoin, speed, selectedCar, upgrades, gameState } = useGameStore();
+  const { targetX, enemies, coins, setGameOver, gameOver, triggerNearMiss, collectCoin, speed, selectedCar, gameState } = useGameStore();
   const group = useRef();
   const wheels = useRef([]);
   const leftTarget = useRef();
@@ -834,7 +758,7 @@ function PlayerCar() {
     if (gameOver || !group.current) return;
     
     const currentX = group.current.position.x;
-    const lerpSpeed = 5 + (upgrades.control * 1);
+    const lerpSpeed = 5;
     group.current.position.x = THREE.MathUtils.lerp(currentX, targetX, delta * lerpSpeed); 
     
     const moveDiff = (group.current.position.x - currentX) / delta;
@@ -843,9 +767,8 @@ function PlayerCar() {
 
     wheels.current.forEach(w => { if(w) w.rotation.x += speed * delta * 0.1; });
 
-    const durabilityBonus = upgrades.durability * 0.15;
-    const playerWidth = VEHICLE_DIMENSIONS.player.width + durabilityBonus;
-    const playerLength = VEHICLE_DIMENSIONS.player.length + durabilityBonus;
+    const playerWidth = VEHICLE_DIMENSIONS.player.width;
+    const playerLength = VEHICLE_DIMENSIONS.player.length;
 
     const updatedEnemies = [];
     let hasCollision = false;
@@ -1383,11 +1306,9 @@ function Game() {
     speed, score, combo, message, gameOver, gameState, countdown, 
     startGame, quitGame, steer,
     totalDistance, nearMissCount, nitro, maxNitro, isNitroActive,
-    selectedCar, selectCar, availableCars, upgrades, upgradeStat,
-    useGyroscope, toggleGyroscope, activateNitro, deactivateNitro
+    selectedCar, activateNitro, deactivateNitro
   } = useGameStore();
   
-  const [showGarage, setShowGarage] = useState(false);
   const { isMobile, isPortrait } = useResponsive();
   
   useEffect(() => {
@@ -1611,8 +1532,6 @@ function Game() {
         }
       `}</style>
       
-      <GyroscopeHandler />
-      
       {gameState === 'playing' && isMobile && <MobileControls />}
 
       {gameState === 'countdown' && (
@@ -1628,98 +1547,6 @@ function Game() {
           <button onClick={handleStart} style={{ padding: isMobile ? '15px 40px' : '20px 60px', fontSize: isMobile ? '20px' : '30px', background: '#00ff00', color:'#000', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #00ff00', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
             START RACE
           </button>
-          
-          <button onClick={() => setShowGarage(!showGarage)} style={{ padding: isMobile ? '12px 30px' : '15px 40px', fontSize: isMobile ? '16px' : '20px', background: '#ff00ff', color:'#fff', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #ff00ff', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
-            {showGarage ? 'CLOSE GARAGE' : 'GARAGE & UPGRADES'}
-          </button>
-          
-          <button onClick={toggleGyroscope} style={{ padding: isMobile ? '8px 20px' : '10px 30px', fontSize: isMobile ? '14px' : '16px', background: useGyroscope ? '#00ff00' : '#666', color:'#fff', border: 'none', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
-            GYROSCOPE: {useGyroscope ? 'ON' : 'OFF'}
-          </button>
-          
-          {showGarage && (
-            <div style={{ 
-              background: 'rgba(0,0,0,0.9)', 
-              padding: isMobile ? '15px' : '30px', 
-              borderRadius: '20px', 
-              maxWidth: isMobile ? '90%' : '800px',
-              width: isMobile ? '90%' : 'auto',
-              maxHeight: isMobile ? '70vh' : 'auto',
-              overflowY: isMobile ? 'auto' : 'visible',
-              border: '2px solid #00ffff', 
-              userSelect: 'none', 
-              WebkitUserSelect: 'none' 
-            }}>
-              <h2 style={{ color: '#00ffff', marginBottom: isMobile ? '10px' : '20px', userSelect: 'none', fontSize: isMobile ? '18px' : '24px' }}>SELECT CAR</h2>
-              <div style={{ display: 'flex', gap: isMobile ? '10px' : '20px', marginBottom: isMobile ? '15px' : '30px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                {availableCars.map(car => (
-                  <button 
-                    key={car} 
-                    onClick={() => selectCar(car)}
-                    style={{ 
-                      padding: isMobile ? '10px 20px' : '15px 30px',
-                      fontSize: isMobile ? '14px' : '16px',
-                      background: selectedCar === car ? '#00ffff' : '#333', 
-                      color: selectedCar === car ? '#000' : '#fff',
-                      border: '2px solid #00ffff',
-                      borderRadius: '10px',
-                      cursor: 'pointer',
-                      fontWeight: 'bold',
-                      textTransform: 'uppercase',
-                      userSelect: 'none',
-                      WebkitUserSelect: 'none',
-                      WebkitTouchCallout: 'none',
-                      touchAction: 'manipulation'
-                    }}
-                  >
-                    {car}
-                  </button>
-                ))}
-              </div>
-              
-              <h2 style={{ color: '#00ffff', marginBottom: isMobile ? '10px' : '20px', userSelect: 'none', fontSize: isMobile ? '18px' : '24px' }}>UPGRADES</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '10px' : '15px' }}>
-                {['speed', 'control', 'durability'].map(stat => (
-                  <div key={stat} style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center', 
-                    background: 'rgba(255,255,255,0.1)', 
-                    padding: isMobile ? '10px' : '15px',
-                    borderRadius: '10px', 
-                    userSelect: 'none',
-                    flexWrap: isMobile ? 'wrap' : 'nowrap',
-                    gap: isMobile ? '10px' : '0'
-                  }}>
-                    <div>
-                      <span style={{ color: '#fff', textTransform: 'uppercase', fontWeight: 'bold', userSelect: 'none', fontSize: isMobile ? '14px' : '16px' }}>{stat}</span>
-                      <span style={{ color: '#00ff00', marginLeft: '10px', userSelect: 'none', fontSize: isMobile ? '12px' : '14px' }}>Level {upgrades[stat]}/5</span>
-                    </div>
-                    <button 
-                      onClick={() => upgradeStat(stat)}
-                      disabled={upgrades[stat] >= 5}
-                      style={{ 
-                        padding: isMobile ? '8px 15px' : '10px 20px',
-                        fontSize: isMobile ? '12px' : '14px',
-                        background: upgrades[stat] >= 5 ? '#666' : '#00ff00',
-                        color: '#000',
-                        border: 'none',
-                        borderRadius: '5px',
-                        cursor: upgrades[stat] >= 5 ? 'not-allowed' : 'pointer',
-                        fontWeight: 'bold',
-                        userSelect: 'none',
-                        WebkitUserSelect: 'none',
-                        WebkitTouchCallout: 'none',
-                        touchAction: 'manipulation'
-                      }}
-                    >
-                      {upgrades[stat] >= 5 ? 'MAX' : `UPGRADE (${upgrades[stat] * 1000})`}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
