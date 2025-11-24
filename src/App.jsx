@@ -4,6 +4,37 @@ import { PerspectiveCamera, Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import { create } from 'zustand';
 
+// ==================== RESPONSIVE HELPER ====================
+const useResponsive = () => {
+  const [dimensions, setDimensions] = useState({
+    isMobile: window.innerWidth < 768,
+    isPortrait: window.innerHeight > window.innerWidth,
+    width: window.innerWidth,
+    height: window.innerHeight
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setDimensions({
+        isMobile: window.innerWidth < 768,
+        isPortrait: window.innerHeight > window.innerWidth,
+        width: window.innerWidth,
+        height: window.innerHeight
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
+  }, []);
+
+  return dimensions;
+};
+
 // ==================== ERROR BOUNDARY ====================
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -157,13 +188,11 @@ const useGameStore = create((set, get) => ({
   
   updateCounter: 0,
   
-  // ✅ FIX: Timer cleanup için ref
   countdownTimer: null,
   
   startGame: () => {
     audioSystem.init();
     
-    // ✅ FIX: Önceki timer'ı temizle
     const state = get();
     if (state.countdownTimer) {
       clearInterval(state.countdownTimer);
@@ -359,7 +388,6 @@ const useGameStore = create((set, get) => ({
       life: p.life - delta * 3
     })).filter(p => p.life > 0);
 
-    // ✅ FIX: Immutable enemy update
     let newEnemies = state.enemies;
     if (newUpdateCounter % 2 === 0) {
       newEnemies = state.enemies.map(e => {
@@ -549,9 +577,9 @@ ParticleSystem.displayName = 'ParticleSystem';
 // ==================== MOBİL KONTROLLER ====================
 const MobileControls = memo(() => {
   const { steer, activateNitro, deactivateNitro } = useGameStore();
+  const { isMobile, isPortrait } = useResponsive();
   const intervalRef = useRef(null);
 
-  // ✅ FIX: Cleanup function
   useEffect(() => {
     return () => {
       if (intervalRef.current) {
@@ -601,6 +629,11 @@ const MobileControls = memo(() => {
     onDragStart: preventAll,
   }), [startSteering, stopSteering, preventAll]);
 
+  // Nitro button size based on orientation
+  const nitroSize = isPortrait ? '50px' : '60px';
+  const nitroBottom = isPortrait ? '80px' : '15px';
+  const nitroRight = isPortrait ? '15px' : '15px';
+
   return (
     <>
       <div
@@ -645,18 +678,18 @@ const MobileControls = memo(() => {
         onDragStart={preventAll}
         style={{
           position: 'fixed',
-          bottom: window.innerWidth < 768 ? '15px' : '30px',
-          right: window.innerWidth < 768 ? '15px' : '30px',
-          width: window.innerWidth < 768 ? '55px' : '100px',
-          height: window.innerWidth < 768 ? '55px' : '100px',
+          bottom: nitroBottom,
+          right: nitroRight,
+          width: nitroSize,
+          height: nitroSize,
           borderRadius: '50%',
           background: 'linear-gradient(135deg, #ff4500 0%, #ff6600 50%, #ff8c00 100%)',
-          border: window.innerWidth < 768 ? '3px solid #fff' : '5px solid #fff',
+          border: '3px solid #fff',
           zIndex: 50,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: window.innerWidth < 768 ? '10px' : '18px',
+          fontSize: '9px',
           color: '#fff',
           fontWeight: 'bold',
           textAlign: 'center',
@@ -770,7 +803,6 @@ const Speedometer = memo(({ speed }) => {
 Speedometer.displayName = 'Speedometer';
 
 // ==================== OYUNCU ARABASI ====================
-// ✅ FIX: Çarpışma boyutları araç geometrisiyle eşleştirildi
 const VEHICLE_DIMENSIONS = {
   player: { width: 1.8, length: 4.2, height: 1.5 },
   truck: { width: 2.6, length: 7.5, height: 5.2 },
@@ -811,12 +843,10 @@ function PlayerCar() {
 
     wheels.current.forEach(w => { if(w) w.rotation.x += speed * delta * 0.1; });
 
-    // ✅ FIX: Geliştirilmiş çarpışma algılama - boyutlar düzeltildi
     const durabilityBonus = upgrades.durability * 0.15;
     const playerWidth = VEHICLE_DIMENSIONS.player.width + durabilityBonus;
     const playerLength = VEHICLE_DIMENSIONS.player.length + durabilityBonus;
 
-    // ✅ FIX: Immutable enemy marking for near miss
     const updatedEnemies = [];
     let hasCollision = false;
     
@@ -860,7 +890,6 @@ function PlayerCar() {
     muscle: '#000000'
   }), []);
 
-  // ✅ FIX: Materials with useMemo and proper disposal
   const materials = useMemo(() => ({
     body: new THREE.MeshStandardMaterial({ color: carColors[selectedCar] || '#aaaaaa', metalness: 0.9, roughness: 0.2 }),
     glass: new THREE.MeshStandardMaterial({ color: '#111', roughness: 0.1 }),
@@ -954,7 +983,6 @@ Coins.displayName = 'Coins';
 const Traffic = memo(() => {
   const enemies = useGameStore(state => state.enemies);
   
-  // ✅ FIX: Materials properly memoized and disposed
   const materials = useMemo(() => ({
     truck: new THREE.MeshStandardMaterial({ color: '#335577', roughness: 0.5 }),
     container: new THREE.MeshStandardMaterial({ color: '#999', roughness: 0.8 }),
@@ -1235,22 +1263,23 @@ function RoadEnvironment() {
 const CameraShake = memo(() => {
   const { cameraShake, gameState } = useGameStore();
   const { camera } = useThree();
-  const isMobile = window.innerWidth < 768;
+  const { isMobile, isPortrait } = useResponsive();
+  
   const originalPosition = useRef({ 
     x: 0, 
-    y: isMobile ? 4 : 6, 
-    z: isMobile ? 8 : 14 
+    y: isMobile && isPortrait ? 4 : (isMobile ? 3.5 : 6), 
+    z: isMobile && isPortrait ? 8 : (isMobile ? 10 : 14)
   });
   
   useEffect(() => {
     if (gameState === 'playing') {
-      const posY = window.innerWidth < 768 ? 4 : 6;
-      const posZ = window.innerWidth < 768 ? 8 : 14;
+      const posY = isMobile && isPortrait ? 4 : (isMobile ? 3.5 : 6);
+      const posZ = isMobile && isPortrait ? 8 : (isMobile ? 10 : 14);
       camera.position.set(0, posY, posZ);
       camera.rotation.set(0, 0, 0);
       originalPosition.current = { x: 0, y: posY, z: posZ };
     }
-  }, [gameState, camera]);
+  }, [gameState, camera, isMobile, isPortrait]);
   
   useFrame(() => {
     if (cameraShake > 0) {
@@ -1304,8 +1333,8 @@ function Game() {
   } = useGameStore();
   
   const [showGarage, setShowGarage] = useState(false);
+  const { isMobile, isPortrait } = useResponsive();
   
-  // ✅ FIX: iOS Tam Ekran Meta Tags - Cleanup added
   useEffect(() => {
     let metaViewport = document.querySelector('meta[name=viewport]');
     if (!metaViewport) {
@@ -1359,7 +1388,6 @@ function Game() {
     };
   }, []);
   
-  // ✅ FIX: Keyboard controls cleanup
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'ArrowLeft') steer(-1);
@@ -1412,7 +1440,6 @@ function Game() {
     fontWeight: 'bold'
   }), []);
 
-  // ✅ FIX: Fullscreen API düzeltildi
   const handleStart = useCallback(() => {
     const elem = document.documentElement;
     
@@ -1423,7 +1450,6 @@ function Game() {
       );
     }
     
-    // ✅ FIX: Proper fullscreen request
     if (elem.requestFullscreen) {
       elem.requestFullscreen().catch(err => console.log('Fullscreen error:', err));
     } else if (elem.webkitRequestFullscreen) {
@@ -1439,6 +1465,45 @@ function Game() {
     
     startGame();
   }, [startGame]);
+
+  // ✅ RESPONSIVE HUD POSITIONS
+  const getHUDPositions = () => {
+    // Desktop
+    if (!isMobile) {
+      return {
+        speedometer: { top: '20px', left: '20px', scale: 1 },
+        score: { top: '20px', right: '20px' },
+        nitro: { top: '20px', left: '50%', transform: 'translateX(-50%)' },
+        combo: { top: '20px', right: '380px' }, // Score ile Nitro arasında, sağda
+        distance: { top: '120px', right: '20px' },
+        nearMiss: { top: '190px', right: '20px' }
+      };
+    }
+    
+    // Mobile Portrait
+    if (isPortrait) {
+      return {
+        speedometer: { top: '3px', left: '3px', scale: 0.35 },
+        score: { top: '5px', right: '5px' },
+        nitro: { top: '5px', left: '50%', transform: 'translateX(-50%)' },
+        combo: { top: '5px', right: '130px' }, // Score ile Nitro arasında
+        distance: { top: '70px', right: '5px' }, // Score'un altında
+        nearMiss: { top: '105px', right: '5px' } // Distance'ın altında
+      };
+    }
+    
+    // Mobile Landscape
+    return {
+      speedometer: { top: '5px', left: '5px', scale: 0.5 },
+      score: { top: '5px', right: '5px' },
+      nitro: { top: '5px', left: '50%', transform: 'translateX(-50%)' },
+      combo: { top: '5px', right: '200px' }, // Score ile Nitro arasında
+      distance: { top: '60px', right: '5px' },
+      nearMiss: { top: '100px', right: '5px' }
+    };
+  };
+
+  const hudPos = getHUDPositions();
 
   return (
     <div style={{ 
@@ -1527,52 +1592,52 @@ function Game() {
       
       <GyroscopeHandler />
       
-      {gameState === 'playing' && <MobileControls />}
+      {gameState === 'playing' && isMobile && <MobileControls />}
 
       {gameState === 'countdown' && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <h1 style={{ fontSize: window.innerWidth < 768 ? '80px' : '150px', color: '#00ff00', textShadow: '0 0 30px #fff', fontStyle: 'italic', fontFamily: 'Arial', userSelect: 'none' }}>{countdown}</h1>
+          <h1 style={{ fontSize: isMobile && isPortrait ? '80px' : (isMobile ? '60px' : '150px'), color: '#00ff00', textShadow: '0 0 30px #fff', fontStyle: 'italic', fontFamily: 'Arial', userSelect: 'none' }}>{countdown}</h1>
         </div>
       )}
 
       {gameState === 'menu' && (
-        <div style={{ position: 'absolute', zIndex: 60, inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)', gap: window.innerWidth < 768 ? '15px' : '20px', userSelect: 'none', WebkitUserSelect: 'none', padding: '20px' }}>
-          <h1 style={{ fontSize: window.innerWidth < 768 ? '36px' : '60px', color: '#00ffff', textShadow: '0 0 30px #00ffff', marginBottom: window.innerWidth < 768 ? '10px' : '20px', userSelect: 'none', textAlign: 'center' }}>HIGHWAY RACER</h1>
+        <div style={{ position: 'absolute', zIndex: 60, inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)', gap: isMobile && isPortrait ? '15px' : (isMobile ? '10px' : '20px'), userSelect: 'none', WebkitUserSelect: 'none', padding: '20px' }}>
+          <h1 style={{ fontSize: isMobile && isPortrait ? '36px' : (isMobile ? '28px' : '60px'), color: '#00ffff', textShadow: '0 0 30px #00ffff', marginBottom: isMobile && isPortrait ? '10px' : (isMobile ? '5px' : '20px'), userSelect: 'none', textAlign: 'center' }}>HIGHWAY RACER</h1>
           
-          <button onClick={handleStart} style={{ padding: window.innerWidth < 768 ? '15px 40px' : '20px 60px', fontSize: window.innerWidth < 768 ? '20px' : '30px', background: '#00ff00', color:'#000', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #00ff00', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
+          <button onClick={handleStart} style={{ padding: isMobile && isPortrait ? '15px 40px' : (isMobile ? '12px 30px' : '20px 60px'), fontSize: isMobile && isPortrait ? '20px' : (isMobile ? '16px' : '30px'), background: '#00ff00', color:'#000', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #00ff00', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
             START RACE
           </button>
           
-          <button onClick={() => setShowGarage(!showGarage)} style={{ padding: window.innerWidth < 768 ? '12px 30px' : '15px 40px', fontSize: window.innerWidth < 768 ? '16px' : '20px', background: '#ff00ff', color:'#fff', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #ff00ff', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
+          <button onClick={() => setShowGarage(!showGarage)} style={{ padding: isMobile && isPortrait ? '12px 30px' : (isMobile ? '10px 25px' : '15px 40px'), fontSize: isMobile && isPortrait ? '16px' : (isMobile ? '14px' : '20px'), background: '#ff00ff', color:'#fff', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #ff00ff', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
             {showGarage ? 'CLOSE GARAGE' : 'GARAGE & UPGRADES'}
           </button>
           
-          <button onClick={toggleGyroscope} style={{ padding: window.innerWidth < 768 ? '8px 20px' : '10px 30px', fontSize: window.innerWidth < 768 ? '14px' : '16px', background: useGyroscope ? '#00ff00' : '#666', color:'#fff', border: 'none', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
+          <button onClick={toggleGyroscope} style={{ padding: isMobile && isPortrait ? '8px 20px' : (isMobile ? '6px 15px' : '10px 30px'), fontSize: isMobile && isPortrait ? '14px' : (isMobile ? '12px' : '16px'), background: useGyroscope ? '#00ff00' : '#666', color:'#fff', border: 'none', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
             GYROSCOPE: {useGyroscope ? 'ON' : 'OFF'}
           </button>
           
           {showGarage && (
             <div style={{ 
               background: 'rgba(0,0,0,0.9)', 
-              padding: window.innerWidth < 768 ? '15px' : '30px', 
+              padding: isMobile && isPortrait ? '15px' : (isMobile ? '10px' : '30px'), 
               borderRadius: '20px', 
-              maxWidth: window.innerWidth < 768 ? '90%' : '800px',
-              width: window.innerWidth < 768 ? '90%' : 'auto',
-              maxHeight: window.innerWidth < 768 ? '70vh' : 'auto',
-              overflowY: window.innerWidth < 768 ? 'auto' : 'visible',
+              maxWidth: isMobile && isPortrait ? '90%' : (isMobile ? '85%' : '800px'),
+              width: isMobile ? '90%' : 'auto',
+              maxHeight: isMobile && isPortrait ? '70vh' : (isMobile ? '60vh' : 'auto'),
+              overflowY: isMobile ? 'auto' : 'visible',
               border: '2px solid #00ffff', 
               userSelect: 'none', 
               WebkitUserSelect: 'none' 
             }}>
-              <h2 style={{ color: '#00ffff', marginBottom: window.innerWidth < 768 ? '10px' : '20px', userSelect: 'none', fontSize: window.innerWidth < 768 ? '18px' : '24px' }}>SELECT CAR</h2>
-              <div style={{ display: 'flex', gap: window.innerWidth < 768 ? '10px' : '20px', marginBottom: window.innerWidth < 768 ? '15px' : '30px', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <h2 style={{ color: '#00ffff', marginBottom: isMobile && isPortrait ? '10px' : (isMobile ? '8px' : '20px'), userSelect: 'none', fontSize: isMobile && isPortrait ? '18px' : (isMobile ? '16px' : '24px') }}>SELECT CAR</h2>
+              <div style={{ display: 'flex', gap: isMobile && isPortrait ? '10px' : (isMobile ? '8px' : '20px'), marginBottom: isMobile && isPortrait ? '15px' : (isMobile ? '12px' : '30px'), flexWrap: 'wrap', justifyContent: 'center' }}>
                 {availableCars.map(car => (
                   <button 
                     key={car} 
                     onClick={() => selectCar(car)}
                     style={{ 
-                      padding: window.innerWidth < 768 ? '10px 20px' : '15px 30px',
-                      fontSize: window.innerWidth < 768 ? '14px' : '16px',
+                      padding: isMobile && isPortrait ? '10px 20px' : (isMobile ? '8px 15px' : '15px 30px'),
+                      fontSize: isMobile && isPortrait ? '14px' : (isMobile ? '12px' : '16px'),
                       background: selectedCar === car ? '#00ffff' : '#333', 
                       color: selectedCar === car ? '#000' : '#fff',
                       border: '2px solid #00ffff',
@@ -1591,30 +1656,30 @@ function Game() {
                 ))}
               </div>
               
-              <h2 style={{ color: '#00ffff', marginBottom: window.innerWidth < 768 ? '10px' : '20px', userSelect: 'none', fontSize: window.innerWidth < 768 ? '18px' : '24px' }}>UPGRADES</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: window.innerWidth < 768 ? '10px' : '15px' }}>
+              <h2 style={{ color: '#00ffff', marginBottom: isMobile && isPortrait ? '10px' : (isMobile ? '8px' : '20px'), userSelect: 'none', fontSize: isMobile && isPortrait ? '18px' : (isMobile ? '16px' : '24px') }}>UPGRADES</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile && isPortrait ? '10px' : (isMobile ? '8px' : '15px') }}>
                 {['speed', 'control', 'durability'].map(stat => (
                   <div key={stat} style={{ 
                     display: 'flex', 
                     justifyContent: 'space-between', 
                     alignItems: 'center', 
                     background: 'rgba(255,255,255,0.1)', 
-                    padding: window.innerWidth < 768 ? '10px' : '15px',
+                    padding: isMobile && isPortrait ? '10px' : (isMobile ? '8px' : '15px'),
                     borderRadius: '10px', 
                     userSelect: 'none',
-                    flexWrap: window.innerWidth < 768 ? 'wrap' : 'nowrap',
-                    gap: window.innerWidth < 768 ? '10px' : '0'
+                    flexWrap: isMobile ? 'wrap' : 'nowrap',
+                    gap: isMobile ? '10px' : '0'
                   }}>
                     <div>
-                      <span style={{ color: '#fff', textTransform: 'uppercase', fontWeight: 'bold', userSelect: 'none', fontSize: window.innerWidth < 768 ? '14px' : '16px' }}>{stat}</span>
-                      <span style={{ color: '#00ff00', marginLeft: '10px', userSelect: 'none', fontSize: window.innerWidth < 768 ? '12px' : '14px' }}>Level {upgrades[stat]}/5</span>
+                      <span style={{ color: '#fff', textTransform: 'uppercase', fontWeight: 'bold', userSelect: 'none', fontSize: isMobile && isPortrait ? '14px' : (isMobile ? '12px' : '16px') }}>{stat}</span>
+                      <span style={{ color: '#00ff00', marginLeft: '10px', userSelect: 'none', fontSize: isMobile && isPortrait ? '12px' : (isMobile ? '10px' : '14px') }}>Level {upgrades[stat]}/5</span>
                     </div>
                     <button 
                       onClick={() => upgradeStat(stat)}
                       disabled={upgrades[stat] >= 5}
                       style={{ 
-                        padding: window.innerWidth < 768 ? '8px 15px' : '10px 20px',
-                        fontSize: window.innerWidth < 768 ? '12px' : '14px',
+                        padding: isMobile && isPortrait ? '8px 15px' : (isMobile ? '6px 12px' : '10px 20px'),
+                        fontSize: isMobile && isPortrait ? '12px' : (isMobile ? '10px' : '14px'),
                         background: upgrades[stat] >= 5 ? '#666' : '#00ff00',
                         color: '#000',
                         border: 'none',
@@ -1637,91 +1702,48 @@ function Game() {
         </div>
       )}
 
-      {/* HUD */}
-      <div style={{ position: 'absolute', top: window.innerWidth < 768 ? 3 : 20, left: window.innerWidth < 768 ? 3 : 20, zIndex: 10, pointerEvents: 'none' }}>
-        <div style={{ transform: window.innerWidth < 768 ? 'scale(0.35)' : 'scale(1)', transformOrigin: 'top left' }}>
+      {/* ✅ RESPONSIVE HUD */}
+      <div style={{ position: 'absolute', ...hudPos.speedometer, zIndex: 10, pointerEvents: 'none' }}>
+        <div style={{ transform: `scale(${hudPos.speedometer.scale})`, transformOrigin: 'top left' }}>
           <Speedometer speed={speed} />
         </div>
       </div>
       
+      {/* Score */}
       <div style={{ 
         position: 'fixed',
-        top: window.innerWidth < 768 ? 5 : 20, 
-        right: window.innerWidth < 768 ? 5 : 20, 
+        ...hudPos.score,
         background: 'linear-gradient(135deg, #333 0%, #000 100%)',
         border: '2px solid #555', 
-        borderRadius: window.innerWidth < 768 ? '5px' : '10px', 
-        padding: window.innerWidth < 768 ? '3px 8px' : '10px 30px',
+        borderRadius: isMobile && isPortrait ? '5px' : (isMobile ? '4px' : '10px'), 
+        padding: isMobile && isPortrait ? '3px 8px' : (isMobile ? '2px 6px' : '10px 30px'),
         transform: 'skewX(-15deg)', 
         zIndex: 10, 
         color: '#fff', 
         textAlign: 'right', 
         boxShadow: '0 5px 15px rgba(0,0,0,0.5)',
-        fontSize: window.innerWidth < 768 ? '0.6em' : '1em'
+        fontSize: isMobile && isPortrait ? '0.6em' : (isMobile ? '0.5em' : '1em')
       }}>
-        <div style={{ fontSize: window.innerWidth < 768 ? '8px' : '12px', ...scoreStyle, transform: 'skewX(15deg)' }}>SCORE</div>
-        <div style={{ fontSize: window.innerWidth < 768 ? '16px' : '40px', ...scoreStyle, transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
+        <div style={{ fontSize: isMobile && isPortrait ? '8px' : (isMobile ? '6px' : '12px'), ...scoreStyle, transform: 'skewX(15deg)' }}>SCORE</div>
+        <div style={{ fontSize: isMobile && isPortrait ? '16px' : (isMobile ? '12px' : '40px'), ...scoreStyle, transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
       </div>
 
+      {/* Nitro Bar */}
       {gameState === 'playing' && (
         <>
-          <div style={{ 
-            position: 'fixed',
-            top: window.innerWidth < 768 ? 35 : 120, 
-            right: window.innerWidth < 768 ? 5 : 20, 
-            zIndex: 10
-          }}>
-            <div style={{ 
-              background: 'linear-gradient(135deg, #1a1a2e 0%, #0f0f1a 100%)',
-              border: '2px solid #00ffff', 
-              borderRadius: window.innerWidth < 768 ? '4px' : '10px', 
-              padding: window.innerWidth < 768 ? '3px 8px' : '8px 20px',
-              transform: 'skewX(-15deg)',
-              boxShadow: '0 5px 15px rgba(0,255,255,0.3)'
-            }}>
-              <div style={{ transform: 'skewX(15deg)', textAlign: 'center' }}>
-                <div style={{ fontSize: window.innerWidth < 768 ? '7px' : '10px', color: '#00ffff', fontWeight: 'bold' }}>DISTANCE</div>
-                <div style={{ fontSize: window.innerWidth < 768 ? '12px' : '24px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #00ffff' }}>{Math.floor(totalDistance)}m</div>
-              </div>
-            </div>
-          </div>
-          
-          <div style={{ 
-            position: 'fixed',
-            top: window.innerWidth < 768 ? 62 : 190, 
-            right: window.innerWidth < 768 ? 5 : 20, 
-            zIndex: 10
-          }}>
-            <div style={{ 
-              background: 'linear-gradient(135deg, #2e1a1a 0%, #1a0f0f 100%)',
-              border: '2px solid #ff00ff', 
-              borderRadius: window.innerWidth < 768 ? '4px' : '10px', 
-              padding: window.innerWidth < 768 ? '3px 8px' : '8px 20px',
-              transform: 'skewX(-15deg)',
-              boxShadow: '0 5px 15px rgba(255,0,255,0.3)'
-            }}>
-              <div style={{ transform: 'skewX(15deg)', textAlign: 'center' }}>
-                <div style={{ fontSize: window.innerWidth < 768 ? '7px' : '10px', color: '#ff00ff', fontWeight: 'bold' }}>NEAR MISS</div>
-                <div style={{ fontSize: window.innerWidth < 768 ? '12px' : '24px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #ff00ff' }}>{nearMissCount}</div>
-              </div>
-            </div>
-          </div>
-
           <div style={{
             position: 'fixed',
-            top: window.innerWidth < 768 ? 5 : 20,
-            left: '50%',
-            transform: 'translateX(-50%)',
+            ...hudPos.nitro,
             zIndex: 10,
             pointerEvents: 'none'
           }}>
             <div style={{
-              width: window.innerWidth < 768 ? '140px' : '300px',
-              height: window.innerWidth < 768 ? '35px' : '70px',
+              width: isMobile && isPortrait ? '140px' : (isMobile ? '180px' : '300px'),
+              height: isMobile && isPortrait ? '35px' : (isMobile ? '40px' : '70px'),
               background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
               border: nitro >= 100 ? '2px solid #ff6600' : '2px solid #ff9933',
-              borderRadius: window.innerWidth < 768 ? '18px' : '35px',
-              padding: window.innerWidth < 768 ? '2px' : '5px',
+              borderRadius: isMobile && isPortrait ? '18px' : (isMobile ? '20px' : '35px'),
+              padding: isMobile && isPortrait ? '2px' : (isMobile ? '3px' : '5px'),
               boxShadow: nitro >= 100 
                 ? '0 5px 30px rgba(255,102,0,0.9), 0 0 40px rgba(255,69,0,0.7)' 
                 : '0 5px 20px rgba(255,153,51,0.6)',
@@ -1733,7 +1755,7 @@ function Game() {
                 top: '50%',
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
-                fontSize: window.innerWidth < 768 ? '14px' : '30px',
+                fontSize: isMobile && isPortrait ? '14px' : (isMobile ? '16px' : '30px'),
                 fontWeight: 'bold',
                 color: nitro >= 100 ? '#fff' : '#666',
                 zIndex: 2,
@@ -1754,7 +1776,7 @@ function Game() {
                   : isNitroActive 
                     ? 'linear-gradient(90deg, #ff9933 0%, #ffaa55 100%)'
                     : 'linear-gradient(90deg, #ff9933 0%, #ff7722 100%)',
-                borderRadius: window.innerWidth < 768 ? '15px' : '30px',
+                borderRadius: isMobile && isPortrait ? '15px' : (isMobile ? '17px' : '30px'),
                 transition: 'width 0.1s ease-out, background 0.3s ease',
                 boxShadow: nitro >= 100
                   ? '0 0 30px rgba(255,102,0,1), inset 0 0 20px rgba(255,69,0,0.8)'
@@ -1770,45 +1792,87 @@ function Game() {
               }} />
             </div>
           </div>
+
+          {/* ✅ Combo - Score ile Nitro arasında */}
+          {combo > 1 && (
+            <div style={{ 
+              position: 'fixed', 
+              ...hudPos.combo,
+              fontSize: isMobile && isPortrait ? '18px' : (isMobile ? '14px' : '32px'), 
+              color: '#00ff00', 
+              fontWeight: 'bold', 
+              zIndex: 10, 
+              textShadow: '0 0 15px lime', 
+              userSelect: 'none', 
+              WebkitUserSelect: 'none', 
+              pointerEvents: 'none',
+              background: 'rgba(0,0,0,0.5)',
+              padding: isMobile && isPortrait ? '5px 10px' : (isMobile ? '4px 8px' : '8px 15px'),
+              borderRadius: '10px',
+              border: '2px solid #00ff00'
+            }}>
+              {combo}x COMBO
+            </div>
+          )}
+          
+          {/* Distance */}
+          <div style={{ 
+            position: 'fixed',
+            ...hudPos.distance,
+            zIndex: 10
+          }}>
+            <div style={{ 
+              background: 'linear-gradient(135deg, #1a1a2e 0%, #0f0f1a 100%)',
+              border: '2px solid #00ffff', 
+              borderRadius: isMobile && isPortrait ? '4px' : (isMobile ? '3px' : '10px'), 
+              padding: isMobile && isPortrait ? '3px 8px' : (isMobile ? '2px 6px' : '8px 20px'),
+              transform: 'skewX(-15deg)',
+              boxShadow: '0 5px 15px rgba(0,255,255,0.3)'
+            }}>
+              <div style={{ transform: 'skewX(15deg)', textAlign: 'center' }}>
+                <div style={{ fontSize: isMobile && isPortrait ? '7px' : (isMobile ? '6px' : '10px'), color: '#00ffff', fontWeight: 'bold' }}>DISTANCE</div>
+                <div style={{ fontSize: isMobile && isPortrait ? '12px' : (isMobile ? '10px' : '24px'), color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #00ffff' }}>{Math.floor(totalDistance)}m</div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Near Miss */}
+          <div style={{ 
+            position: 'fixed',
+            ...hudPos.nearMiss,
+            zIndex: 10
+          }}>
+            <div style={{ 
+              background: 'linear-gradient(135deg, #2e1a1a 0%, #1a0f0f 100%)',
+              border: '2px solid #ff00ff', 
+              borderRadius: isMobile && isPortrait ? '4px' : (isMobile ? '3px' : '10px'), 
+              padding: isMobile && isPortrait ? '3px 8px' : (isMobile ? '2px 6px' : '8px 20px'),
+              transform: 'skewX(-15deg)',
+              boxShadow: '0 5px 15px rgba(255,0,255,0.3)'
+            }}>
+              <div style={{ transform: 'skewX(15deg)', textAlign: 'center' }}>
+                <div style={{ fontSize: isMobile && isPortrait ? '7px' : (isMobile ? '6px' : '10px'), color: '#ff00ff', fontWeight: 'bold' }}>NEAR MISS</div>
+                <div style={{ fontSize: isMobile && isPortrait ? '12px' : (isMobile ? '10px' : '24px'), color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #ff00ff' }}>{nearMissCount}</div>
+              </div>
+            </div>
+          </div>
         </>
       )}
-
-      {combo > 1 && (
-        <div style={{ 
-          position: 'absolute', 
-          top: window.innerWidth < 768 ? 15 : 25, 
-          right: window.innerWidth < 768 ? 10 : 20, 
-          fontSize: window.innerWidth < 768 ? '18px' : '32px', 
-          color: '#00ff00', 
-          fontWeight: 'bold', 
-          zIndex: 10, 
-          textShadow: '0 0 15px lime', 
-          userSelect: 'none', 
-          WebkitUserSelect: 'none', 
-          pointerEvents: 'none',
-          background: 'rgba(0,0,0,0.5)',
-          padding: window.innerWidth < 768 ? '5px 10px' : '8px 15px',
-          borderRadius: '10px',
-          border: '2px solid #00ff00'
-        }}>
-          {combo}x COMBO
-        </div>
-      )}
       
-      {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: messageColor, fontSize: window.innerWidth < 768 ? 'clamp(16px, 5vw, 36px)' : 'clamp(30px, 8vw, 80px)', fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: messageShadow, textTransform: 'uppercase', letterSpacing: '2px', whiteSpace: 'nowrap', userSelect: 'none', WebkitUserSelect: 'none', pointerEvents: 'none' }}>{message}</div>}
+      {message && <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', color: messageColor, fontSize: isMobile && isPortrait ? 'clamp(16px, 5vw, 36px)' : (isMobile ? 'clamp(14px, 4vw, 28px)' : 'clamp(30px, 8vw, 80px)'), fontWeight: 'bold', fontStyle: 'italic', zIndex: 15, textShadow: messageShadow, textTransform: 'uppercase', letterSpacing: '2px', whiteSpace: 'nowrap', userSelect: 'none', WebkitUserSelect: 'none', pointerEvents: 'none' }}>{message}</div>}
 
       {gameOver && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(50,0,0,0.95)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', fontFamily: 'Arial', userSelect: 'none', WebkitUserSelect: 'none', padding: '20px' }}>
-          <h1 style={{ fontSize: window.innerWidth < 768 ? 'clamp(30px, 8vw, 50px)' : 'clamp(40px, 10vw, 80px)', color: '#ff0000', margin: '0 0 20px 0', textShadow: '0 0 30px red', textTransform: 'uppercase', textAlign: 'center', userSelect: 'none' }}>YOU CRASHED</h1>
-          <h2 style={{ color: '#fff', fontSize: window.innerWidth < 768 ? '20px' : '30px', marginBottom: window.innerWidth < 768 ? '15px' : '20px', userSelect: 'none' }}>FINAL SCORE: {Math.floor(score)}</h2>
-          <div style={{ color: '#00ffff', fontSize: window.innerWidth < 768 ? '16px' : '20px', marginBottom: window.innerWidth < 768 ? '30px' : '40px', userSelect: 'none', textAlign: 'center' }}>
+          <h1 style={{ fontSize: isMobile && isPortrait ? 'clamp(30px, 8vw, 50px)' : (isMobile ? 'clamp(25px, 7vw, 40px)' : 'clamp(40px, 10vw, 80px)'), color: '#ff0000', margin: '0 0 20px 0', textShadow: '0 0 30px red', textTransform: 'uppercase', textAlign: 'center', userSelect: 'none' }}>YOU CRASHED</h1>
+          <h2 style={{ color: '#fff', fontSize: isMobile && isPortrait ? '20px' : (isMobile ? '16px' : '30px'), marginBottom: isMobile && isPortrait ? '15px' : (isMobile ? '12px' : '20px'), userSelect: 'none' }}>FINAL SCORE: {Math.floor(score)}</h2>
+          <div style={{ color: '#00ffff', fontSize: isMobile && isPortrait ? '16px' : (isMobile ? '14px' : '20px'), marginBottom: isMobile && isPortrait ? '30px' : (isMobile ? '25px' : '40px'), userSelect: 'none', textAlign: 'center' }}>
             <div>Distance: {Math.floor(totalDistance)}m</div>
             <div>Near Misses: {nearMissCount}</div>
           </div>
           
-          <div style={{ display: 'flex', gap: window.innerWidth < 768 ? '15px' : '20px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button onClick={startGame} style={{ padding: window.innerWidth < 768 ? '15px 30px' : '20px 40px', fontSize: window.innerWidth < 768 ? '18px' : '24px', cursor: 'pointer', background: '#fff', color: '#000', border: 'none', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', boxShadow: '0 0 20px white', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>RESTART</button>
-            <button onClick={quitGame} style={{ padding: window.innerWidth < 768 ? '15px 30px' : '20px 40px', fontSize: window.innerWidth < 768 ? '18px' : '24px', cursor: 'pointer', background: '#333', color: '#fff', border: '1px solid #666', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>QUIT</button>
+          <div style={{ display: 'flex', gap: isMobile && isPortrait ? '15px' : (isMobile ? '12px' : '20px'), flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button onClick={startGame} style={{ padding: isMobile && isPortrait ? '15px 30px' : (isMobile ? '12px 25px' : '20px 40px'), fontSize: isMobile && isPortrait ? '18px' : (isMobile ? '16px' : '24px'), cursor: 'pointer', background: '#fff', color: '#000', border: 'none', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', boxShadow: '0 0 20px white', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>RESTART</button>
+            <button onClick={quitGame} style={{ padding: isMobile && isPortrait ? '15px 30px' : (isMobile ? '12px 25px' : '20px 40px'), fontSize: isMobile && isPortrait ? '18px' : (isMobile ? '16px' : '24px'), cursor: 'pointer', background: '#333', color: '#fff', border: '1px solid #666', borderRadius: '5px', fontWeight: 'bold', textTransform: 'uppercase', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>QUIT</button>
           </div>
         </div>
       )}
@@ -1821,8 +1885,8 @@ function Game() {
       >
         <PerspectiveCamera 
           makeDefault 
-          position={window.innerWidth < 768 ? [0, 4, 8] : [0, 6, 14]} 
-          fov={window.innerWidth < 768 ? 65 : 55} 
+          position={isMobile && isPortrait ? [0, 4, 8] : (isMobile ? [0, 3.5, 10] : [0, 6, 14])} 
+          fov={isMobile && isPortrait ? 65 : (isMobile ? 70 : 55)} 
         />
         <ambientLight intensity={0.6} color="#ffffff" /> 
         <hemisphereLight skyColor="#445566" groundColor="#223344" intensity={0.6} />
