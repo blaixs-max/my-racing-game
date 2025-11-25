@@ -4,7 +4,7 @@ import { PerspectiveCamera, Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import { create } from 'zustand';
 
-// ==================== RESPONSIVE HELPER ====================
+// ==================== RESPONSIVE HELPER (Debounce Eklendi) ====================
 const useResponsive = () => {
   const [dimensions, setDimensions] = useState({
     isMobile: window.innerWidth < 768,
@@ -14,19 +14,26 @@ const useResponsive = () => {
   });
 
   useEffect(() => {
+    let timeoutId = null;
+    
     const handleResize = () => {
-      setDimensions({
-        isMobile: window.innerWidth < 768,
-        isPortrait: window.innerHeight > window.innerWidth,
-        width: window.innerWidth,
-        height: window.innerHeight
-      });
+      // Debounce: 100ms bekle
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        setDimensions({
+          isMobile: window.innerWidth < 768,
+          isPortrait: window.innerHeight > window.innerWidth,
+          width: window.innerWidth,
+          height: window.innerHeight
+        });
+      }, 100);
     };
 
     window.addEventListener('resize', handleResize);
     window.addEventListener('orientationchange', handleResize);
     
     return () => {
+      if (timeoutId) clearTimeout(timeoutId);
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
     };
@@ -181,6 +188,13 @@ const useGameStore = create((set, get) => ({
   
   countdownTimer: null,
   
+  // FIX 1: Enemy passed flag güncellemesi için yeni action
+  updateEnemyPassed: (enemyId) => set((state) => ({
+    enemies: state.enemies.map(e => 
+      e.id === enemyId ? { ...e, passed: true } : e
+    )
+  })),
+  
   startGame: () => {
     audioSystem.init();
     
@@ -251,6 +265,15 @@ const useGameStore = create((set, get) => ({
     });
   },
   
+  // FIX 4: Timer cleanup için
+  cleanupTimer: () => {
+    const state = get();
+    if (state.countdownTimer) {
+      clearInterval(state.countdownTimer);
+      set({ countdownTimer: null });
+    }
+  },
+  
   steer: (direction) => set((state) => {
     if (state.gameState !== 'playing') return {};
     const step = 1.25;
@@ -302,7 +325,6 @@ const useGameStore = create((set, get) => ({
       particles: [...state.particles, ...newParticles]
     }));
     
-    // ✅ FIX: Aynı sürede kaybolsun (600ms)
     setTimeout(() => set({ message: "" }), 600);
   },
 
@@ -325,122 +347,124 @@ const useGameStore = create((set, get) => ({
     set((state) => ({ particles: [...state.particles, ...newParticles] }));
   },
 
+  // FIX 3: Nested set() kaldırıldı, return değeri içinde nitro kontrolü yapılıyor
   updateGame: (delta) => set((state) => {
     if (state.gameState !== 'playing') return { speed: 0 };
+
+    // FIX 6: Delta spike koruması - maksimum 0.1 saniye (100ms)
+    const clampedDelta = Math.min(delta, 0.1);
 
     const newUpdateCounter = (state.updateCounter || 0) + 1;
 
     let newNitro = state.nitro;
     let newTargetSpeed = 110;
+    let newIsNitroActive = state.isNitroActive;
     
     if (state.isNitroActive && state.nitro > 0) {
-      newNitro = Math.max(0, state.nitro - delta * 25);
+      newNitro = Math.max(0, state.nitro - clampedDelta * 25);
       newTargetSpeed = 150;
       
+      // FIX 3: Nested set yerine state içinde güncelleme
       if (newNitro <= 0) {
-        set({ isNitroActive: false });
+        newIsNitroActive = false;
       }
     } else {
-      newNitro = Math.min(state.maxNitro, state.nitro + delta * state.nitroRegenRate);
+      newNitro = Math.min(state.maxNitro, state.nitro + clampedDelta * state.nitroRegenRate);
       newTargetSpeed = 110;
     }
 
-    const newSpeed = THREE.MathUtils.lerp(state.speed, newTargetSpeed, delta * 2);
-    const newScore = state.score + (newSpeed * delta * 0.2);
-    const newDistance = state.totalDistance + (newSpeed * delta * 0.1);
+    const newSpeed = THREE.MathUtils.lerp(state.speed, newTargetSpeed, clampedDelta * 2);
+    const newScore = state.score + (newSpeed * clampedDelta * 0.2);
+    const newDistance = state.totalDistance + (newSpeed * clampedDelta * 0.1);
 
-    const newShake = Math.max(0, state.cameraShake - delta * 5);
+    const newShake = Math.max(0, state.cameraShake - clampedDelta * 5);
 
     let newParticles = state.particles.map(p => ({
       ...p,
-      x: p.x + p.vx * delta,
-      y: p.y + p.vy * delta - 9.8 * delta,
-      z: p.z + p.vz * delta,
-      vy: p.vy - 9.8 * delta,
-      life: p.life - delta * 3
+      x: p.x + p.vx * clampedDelta,
+      y: p.y + p.vy * clampedDelta - 9.8 * clampedDelta,
+      z: p.z + p.vz * clampedDelta,
+      vy: p.vy - 9.8 * clampedDelta,
+      life: p.life - clampedDelta * 3
     })).filter(p => p.life > 0);
 
-    let newEnemies = state.enemies;
-    if (newUpdateCounter % 2 === 0) {
-      newEnemies = state.enemies.map(e => {
-        let updated = { ...e };
+    // FIX 7: Frame-rate bağımsız enemy update - zamana dayalı
+    let newEnemies = state.enemies.map(e => {
+      let updated = { ...e };
+      
+      // Şerit değiştirme mantığı - zamana dayalı olasılık
+      if (!e.isChanging && Math.random() < 0.003 * (clampedDelta * 60)) {
+        const currentLane = e.lane;
+        let possibleLanes = [];
         
-        if (!e.isChanging && Math.random() < 0.003) {
-          const currentLane = e.lane;
-          let possibleLanes = [];
-          
-          if (currentLane === -1) {
-            possibleLanes = [0];
-          } else if (currentLane === 0) {
-            possibleLanes = [-1, 1];
-          } else if (currentLane === 1) {
-            possibleLanes = [0];
-          }
-          
-          const safeLanes = possibleLanes.filter(l => {
-            const targetX = l * 4.5;
-            const isSafe = !state.enemies.some(other => 
-              other.id !== e.id && 
-              Math.abs(other.x - targetX) < 3 && 
-              Math.abs(other.z - e.z) < 25
-            );
-            return isSafe;
-          });
-          
-          if (safeLanes.length > 0) {
-            const newLane = safeLanes[Math.floor(Math.random() * safeLanes.length)];
-            updated = {
-              ...updated,
-              isChanging: true,
-              targetLane: newLane,
-              changeProgress: 0
-            };
-          }
+        if (currentLane === -1) {
+          possibleLanes = [0];
+        } else if (currentLane === 0) {
+          possibleLanes = [-1, 1];
+        } else if (currentLane === 1) {
+          possibleLanes = [0];
         }
         
-        if (updated.isChanging) {
-          const newProgress = updated.changeProgress + delta * 2;
-          const startX = updated.lane * 4.5;
-          const endX = updated.targetLane * 4.5;
-          const newX = THREE.MathUtils.lerp(startX, endX, Math.min(newProgress, 1));
-          
-          if (newProgress >= 1) {
-            updated = {
-              ...updated,
-              isChanging: false,
-              lane: updated.targetLane,
-              x: updated.targetLane * 4.5,
-              changeProgress: 0,
-              z: e.z + (newSpeed - e.ownSpeed * 0.5) * delta * 0.5
-            };
-          } else {
-            updated = {
-              ...updated,
-              x: newX,
-              changeProgress: newProgress,
-              z: e.z + (newSpeed - e.ownSpeed * 0.5) * delta * 0.5
-            };
-          }
+        const safeLanes = possibleLanes.filter(l => {
+          const targetX = l * 4.5;
+          const isSafe = !state.enemies.some(other => 
+            other.id !== e.id && 
+            Math.abs(other.x - targetX) < 3 && 
+            Math.abs(other.z - e.z) < 25
+          );
+          return isSafe;
+        });
+        
+        if (safeLanes.length > 0) {
+          const newLane = safeLanes[Math.floor(Math.random() * safeLanes.length)];
+          updated = {
+            ...updated,
+            isChanging: true,
+            targetLane: newLane,
+            changeProgress: 0
+          };
+        }
+      }
+      
+      if (updated.isChanging) {
+        const newProgress = updated.changeProgress + clampedDelta * 2;
+        const startX = updated.lane * 4.5;
+        const endX = updated.targetLane * 4.5;
+        const newX = THREE.MathUtils.lerp(startX, endX, Math.min(newProgress, 1));
+        
+        if (newProgress >= 1) {
+          updated = {
+            ...updated,
+            isChanging: false,
+            lane: updated.targetLane,
+            x: updated.targetLane * 4.5,
+            changeProgress: 0,
+            z: e.z + (newSpeed - e.ownSpeed * 0.5) * clampedDelta * 0.5
+          };
         } else {
-          updated.z = e.z + (newSpeed - e.ownSpeed * 0.5) * delta * 0.5;
+          updated = {
+            ...updated,
+            x: newX,
+            changeProgress: newProgress,
+            z: e.z + (newSpeed - e.ownSpeed * 0.5) * clampedDelta * 0.5
+          };
         }
-        
-        return updated;
-      }).filter(e => e.z < 50);
-    } else {
-      newEnemies = state.enemies.map(e => ({
-        ...e,
-        z: e.z + (newSpeed - e.ownSpeed * 0.5) * delta * 0.5
-      })).filter(e => e.z < 50);
-    }
+      } else {
+        updated.z = e.z + (newSpeed - e.ownSpeed * 0.5) * clampedDelta * 0.5;
+      }
+      
+      return updated;
+    }).filter(e => e.z < 50);
 
     let newCoins = state.coins.map(c => ({
       ...c,
-      z: c.z + newSpeed * delta * 0.5
+      z: c.z + newSpeed * clampedDelta * 0.5
     })).filter(c => c.z < 50);
 
     const difficulty = Math.min(state.score / 15000, 1.0);
-    const spawnRate = 0.015 + (difficulty * 0.03);
+    // FIX 7: Spawn rate zamana dayalı
+    const baseSpawnRate = 0.015 + (difficulty * 0.03);
+    const spawnRate = baseSpawnRate * (clampedDelta * 60);
 
     if (Math.random() < spawnRate && newEnemies.length < 10) {
       const lanes = [-1, 0, 1];
@@ -478,7 +502,8 @@ const useGameStore = create((set, get) => ({
       }
     }
 
-    if (Math.random() < 0.02 && newCoins.length < 3) {
+    // FIX 7: Coin spawn zamana dayalı
+    if (Math.random() < 0.02 * (clampedDelta * 60) && newCoins.length < 3) {
       const coinLane = Math.floor(Math.random() * 3) - 1;
       const coinX = coinLane * 4.5;
       const isSafeCar = !newEnemies.some(e => Math.abs(e.x - coinX) < 2 && Math.abs(e.z - -400) < 40);
@@ -499,6 +524,7 @@ const useGameStore = create((set, get) => ({
       cameraShake: newShake,
       nitro: newNitro,
       targetSpeed: newTargetSpeed,
+      isNitroActive: newIsNitroActive, // FIX 3: Nested set yerine burada güncelleme
       updateCounter: newUpdateCounter
     };
   }),
@@ -738,7 +764,7 @@ const VEHICLE_DIMENSIONS = {
 };
 
 function PlayerCar() {
-  const { targetX, enemies, coins, setGameOver, gameOver, triggerNearMiss, collectCoin, speed, selectedCar, gameState } = useGameStore();
+  const { targetX, enemies, coins, setGameOver, gameOver, triggerNearMiss, collectCoin, speed, selectedCar, gameState, updateEnemyPassed } = useGameStore();
   const group = useRef();
   const wheels = useRef([]);
   const leftTarget = useRef();
@@ -757,22 +783,25 @@ function PlayerCar() {
   useFrame((state, delta) => {
     if (gameOver || !group.current) return;
     
+    // FIX 6: Delta spike koruması
+    const clampedDelta = Math.min(delta, 0.1);
+    
     const currentX = group.current.position.x;
     const lerpSpeed = 5;
-    group.current.position.x = THREE.MathUtils.lerp(currentX, targetX, delta * lerpSpeed); 
+    group.current.position.x = THREE.MathUtils.lerp(currentX, targetX, clampedDelta * lerpSpeed); 
     
-    const moveDiff = (group.current.position.x - currentX) / delta;
+    const moveDiff = (group.current.position.x - currentX) / clampedDelta;
     group.current.rotation.z = -moveDiff * 0.002; 
     group.current.rotation.x = -speed * 0.0002; 
 
-    wheels.current.forEach(w => { if(w) w.rotation.x += speed * delta * 0.1; });
+    wheels.current.forEach(w => { if(w) w.rotation.x += speed * clampedDelta * 0.1; });
 
     const playerWidth = VEHICLE_DIMENSIONS.player.width;
     const playerLength = VEHICLE_DIMENSIONS.player.length;
 
-    const updatedEnemies = [];
     let hasCollision = false;
     
+    // FIX 1: Near miss kontrolü ve enemy passed güncellemesi
     enemies.forEach(enemy => {
       const dx = Math.abs(group.current.position.x - enemy.x);
       const dz = Math.abs(enemy.z - (-2));
@@ -791,16 +820,14 @@ function PlayerCar() {
       const nearMissWidthMax = crashWidthThreshold + 1.2;
       const nearMissDepthThreshold = crashDepthThreshold + 0.8;
       
-      // Near miss: Yandan geçerken ve minimum mesafeden uzakken
+      // FIX 1: Near miss - passed flag'i store'da güncelleniyor
       if (!enemy.passed && 
           dz < nearMissDepthThreshold && 
-          dz >= 1.0 && // Minimum distance to count as near miss
+          dz >= 1.0 && 
           dx >= nearMissWidthMin && 
           dx < nearMissWidthMax) {
-        updatedEnemies.push({ ...enemy, passed: true });
+        updateEnemyPassed(enemy.id); // Store'da güncelle
         triggerNearMiss({ x: enemy.x, y: 1, z: enemy.z });
-      } else {
-        updatedEnemies.push(enemy);
       }
     });
 
@@ -884,7 +911,9 @@ const SingleCoin = memo(({ x, z }) => {
   }, [material]);
 
   useFrame((state, delta) => {
-    if(group.current) group.current.rotation.y += delta * 3; 
+    // FIX 6: Delta clamp
+    const clampedDelta = Math.min(delta, 0.1);
+    if(group.current) group.current.rotation.y += clampedDelta * 3; 
   });
 
   return (
@@ -1073,10 +1102,13 @@ const SideObjects = memo(({ side }) => {
   }, [treeMaterials]);
 
   useFrame((state, delta) => {
+    // FIX 6: Delta clamp
+    const clampedDelta = Math.min(delta, 0.1);
+    
     if (groupRef.current) {
       groupRef.current.children.forEach((mesh, i) => {
         const item = itemsRef.current[i];
-        item.z += speed * delta * 0.5; 
+        item.z += speed * clampedDelta * 0.5; 
         if (item.z > 20) {
           item.z = -1500; 
           const rand = Math.random();
@@ -1108,6 +1140,35 @@ const SideObjects = memo(({ side }) => {
 
 SideObjects.displayName = 'SideObjects';
 
+// FIX 2: Barrier component'i dışarıya çıkarıldı
+const Barrier = memo(({ x }) => {
+  const barrierMaterials = useMemo(() => ({
+    post: new THREE.MeshStandardMaterial({color: '#999'}),
+    rail: new THREE.MeshStandardMaterial({color: '#B0C4DE', metalness: 0.6, roughness: 0.4})
+  }), []);
+
+  useEffect(() => {
+    return () => {
+      Object.values(barrierMaterials).forEach(mat => mat.dispose());
+    };
+  }, [barrierMaterials]);
+
+  return (
+    <group position={[x, 0, 0]}>
+      {Array.from({length: 40}).map((_, i) => (
+        <mesh key={i} position={[0, 0.5, -i * 10]} material={barrierMaterials.post}>
+          <boxGeometry args={[0.2, 1.0, 0.2]} />
+        </mesh>
+      ))}
+      <mesh position={[0, 0.8, -200]} material={barrierMaterials.rail}>
+        <boxGeometry args={[0.3, 0.4, 1000]} />
+      </mesh>
+    </group>
+  );
+});
+
+Barrier.displayName = 'Barrier';
+
 // ==================== YOL VE ZEMİN ====================
 function RoadEnvironment() {
   const { updateGame, speed } = useGameStore();
@@ -1115,41 +1176,17 @@ function RoadEnvironment() {
 
   useFrame((state, delta) => {
     updateGame(delta);
+    
+    // FIX 6: Delta clamp
+    const clampedDelta = Math.min(delta, 0.1);
+    
     if (stripesRef.current) {
       stripesRef.current.children.forEach(stripe => {
-        stripe.position.z += speed * delta * 0.5;
+        stripe.position.z += speed * clampedDelta * 0.5;
         if (stripe.position.z > 10) stripe.position.z = -200;
       });
     }
   });
-
-  const Barrier = memo(({ x }) => {
-    const barrierMaterials = useMemo(() => ({
-      post: new THREE.MeshStandardMaterial({color: '#999'}),
-      rail: new THREE.MeshStandardMaterial({color: '#B0C4DE', metalness: 0.6, roughness: 0.4})
-    }), []);
-
-    useEffect(() => {
-      return () => {
-        Object.values(barrierMaterials).forEach(mat => mat.dispose());
-      };
-    }, [barrierMaterials]);
-
-    return (
-      <group position={[x, 0, 0]}>
-        {Array.from({length: 40}).map((_, i) => (
-          <mesh key={i} position={[0, 0.5, -i * 10]} material={barrierMaterials.post}>
-            <boxGeometry args={[0.2, 1.0, 0.2]} />
-          </mesh>
-        ))}
-        <mesh position={[0, 0.8, -200]} material={barrierMaterials.rail}>
-          <boxGeometry args={[0.3, 0.4, 1000]} />
-        </mesh>
-      </group>
-    );
-  });
-
-  Barrier.displayName = 'Barrier';
 
   const roadMaterials = useMemo(() => ({
     road: new THREE.MeshStandardMaterial({ color: "#555", roughness: 0.8 }),
@@ -1177,6 +1214,7 @@ function RoadEnvironment() {
           </mesh>
         )))}
       </group>
+      {/* FIX 2: Barrier artık dışarıda tanımlı */}
       <Barrier x={-10.5} />
       <Barrier x={10.5} />
       <SideObjects side={1} />
@@ -1203,7 +1241,6 @@ const CameraShake = memo(() => {
   
   useEffect(() => {
     if (gameState === 'playing' || gameState === 'countdown') {
-      // Reset camera immediately when starting new game
       camera.position.set(0, 4, 8);
       camera.rotation.set(0, 0, 0);
       originalPosition.current = { x: 0, y: 4, z: 8 };
@@ -1215,7 +1252,6 @@ const CameraShake = memo(() => {
       camera.position.x = originalPosition.current.x + (Math.random() - 0.5) * cameraShake * 0.5;
       camera.position.y = originalPosition.current.y + (Math.random() - 0.5) * cameraShake * 0.5;
     } else {
-      // Immediately reset position when not shaking
       camera.position.x = originalPosition.current.x;
       camera.position.y = originalPosition.current.y;
     }
@@ -1304,12 +1340,19 @@ LandscapeBlocker.displayName = 'LandscapeBlocker';
 function Game() {
   const { 
     speed, score, combo, message, gameOver, gameState, countdown, 
-    startGame, quitGame, steer,
+    startGame, quitGame, steer, cleanupTimer,
     totalDistance, nearMissCount, nitro, maxNitro, isNitroActive,
     selectedCar, activateNitro, deactivateNitro
   } = useGameStore();
   
   const { isMobile, isPortrait } = useResponsive();
+  
+  // FIX 4: Component unmount'ta timer cleanup
+  useEffect(() => {
+    return () => {
+      cleanupTimer();
+    };
+  }, [cleanupTimer]);
   
   useEffect(() => {
     let metaViewport = document.querySelector('meta[name=viewport]');
@@ -1442,7 +1485,6 @@ function Game() {
     startGame();
   }, [startGame]);
 
-  // ✅ FIX 2: Mobil landscape'de oyunu engelle
   if (isMobile && !isPortrait) {
     return <LandscapeBlocker />;
   }
@@ -1690,7 +1732,7 @@ function Game() {
         </>
       )}
       
-      {/* ✅ FIX 1: Mesaj - Combo ile birlikte göster */}
+      {/* Message */}
       {message && (
         <div style={{ 
           position: 'absolute', 
