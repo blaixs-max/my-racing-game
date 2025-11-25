@@ -573,7 +573,7 @@ const ParticleSystem = memo(() => {
 ParticleSystem.displayName = 'ParticleSystem';
 
 // ==================== MOBİL KONTROLLER ====================
-const MobileControls = memo(() => {
+const MobileControls = memo(({ isLandscape = false }) => {
   const { steer, activateNitro, deactivateNitro } = useGameStore();
   const intervalRef = useRef(null);
 
@@ -621,60 +621,81 @@ const MobileControls = memo(() => {
       e.preventDefault();
       e.stopPropagation();
     },
+    onTouchCancel: (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      stopSteering();
+    },
     onContextMenu: preventAll,
     onSelectStart: preventAll,
     onDragStart: preventAll,
   }), [startSteering, stopSteering, preventAll]);
 
+  // Landscape modda nitro butonu konumu
+  const nitroStyle = isLandscape ? {
+    position: 'fixed',
+    bottom: '20px',
+    right: '20px',
+    width: '70px',
+    height: '70px',
+  } : {
+    position: 'fixed',
+    bottom: '80px',
+    right: '15px',
+    width: '50px',
+    height: '50px',
+  };
+
   return (
     <>
+      {/* Sol kontrol alanı */}
       <div
         style={{ 
-          position: 'absolute', 
+          position: 'fixed', 
           top: 0, 
           left: 0, 
-          width: '50%', 
+          width: isLandscape ? '35%' : '50%', 
           height: '100%', 
           zIndex: 40, 
           touchAction: 'none',
           userSelect: 'none',
           WebkitUserSelect: 'none',
           WebkitTouchCallout: 'none',
-          pointerEvents: 'auto'
+          pointerEvents: 'auto',
+          background: 'transparent'
         }}
         {...handlers(-1)}
       />
+      {/* Sağ kontrol alanı */}
       <div
         style={{ 
-          position: 'absolute', 
+          position: 'fixed', 
           top: 0, 
-          right: 0, 
-          width: '50%', 
+          right: isLandscape ? '15%' : 0, 
+          width: isLandscape ? '35%' : '50%', 
           height: '100%', 
           zIndex: 40, 
           touchAction: 'none',
           userSelect: 'none',
           WebkitUserSelect: 'none',
           WebkitTouchCallout: 'none',
-          pointerEvents: 'auto'
+          pointerEvents: 'auto',
+          background: 'transparent'
         }}
         {...handlers(1)}
       />
       
-      {/* Nitro Button - Portrait için */}
+      {/* Nitro Button */}
       <div
         onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); activateNitro(); }}
         onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); deactivateNitro(); }}
+        onTouchCancel={(e) => { e.preventDefault(); e.stopPropagation(); deactivateNitro(); }}
         onTouchMove={(e) => { e.preventDefault(); e.stopPropagation(); }}
         onContextMenu={preventAll}
         onSelectStart={preventAll}
         onDragStart={preventAll}
         style={{
-          position: 'fixed',
-          bottom: '80px',
-          right: '15px',
-          width: '50px',
-          height: '50px',
+          ...nitroStyle,
           borderRadius: '50%',
           background: 'linear-gradient(135deg, #ff4500 0%, #ff6600 50%, #ff8c00 100%)',
           border: '3px solid #fff',
@@ -682,7 +703,7 @@ const MobileControls = memo(() => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: '9px',
+          fontSize: isLandscape ? '11px' : '9px',
           color: '#fff',
           fontWeight: 'bold',
           textAlign: 'center',
@@ -698,6 +719,50 @@ const MobileControls = memo(() => {
       >
         🔥<br/>NITRO
       </div>
+      
+      {/* Landscape modda yön göstergeleri */}
+      {isLandscape && (
+        <>
+          <div style={{
+            position: 'fixed',
+            bottom: '20px',
+            left: '20px',
+            width: '60px',
+            height: '60px',
+            borderRadius: '50%',
+            background: 'rgba(255,255,255,0.15)',
+            border: '2px solid rgba(255,255,255,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '24px',
+            color: 'rgba(255,255,255,0.5)',
+            pointerEvents: 'none',
+            zIndex: 35
+          }}>
+            ◀
+          </div>
+          <div style={{
+            position: 'fixed',
+            bottom: '20px',
+            right: '100px',
+            width: '60px',
+            height: '60px',
+            borderRadius: '50%',
+            background: 'rgba(255,255,255,0.15)',
+            border: '2px solid rgba(255,255,255,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '24px',
+            color: 'rgba(255,255,255,0.5)',
+            pointerEvents: 'none',
+            zIndex: 35
+          }}>
+            ▶
+          </div>
+        </>
+      )}
       
       <style>{`
         @keyframes pulseNitro {
@@ -1485,9 +1550,10 @@ function Game() {
     startGame();
   }, [startGame]);
 
-  if (isMobile && !isPortrait) {
-    return <LandscapeBlocker />;
-  }
+  // Landscape modda da oynanabilir
+  // if (isMobile && !isPortrait) {
+  //   return <LandscapeBlocker />;
+  // }
 
   return (
     <div style={{ 
@@ -1574,7 +1640,7 @@ function Game() {
         }
       `}</style>
       
-      {gameState === 'playing' && isMobile && <MobileControls />}
+      {gameState === 'playing' && isMobile && <MobileControls isLandscape={!isPortrait} />}
 
       {gameState === 'countdown' && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
@@ -1584,8 +1650,6 @@ function Game() {
 
       {gameState === 'menu' && (
         <div style={{ position: 'absolute', zIndex: 60, inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)', gap: isMobile ? '15px' : '20px', userSelect: 'none', WebkitUserSelect: 'none', padding: '20px' }}>
-          <h1 style={{ fontSize: isMobile ? '36px' : '60px', color: '#00ffff', textShadow: '0 0 30px #00ffff', marginBottom: isMobile ? '10px' : '20px', userSelect: 'none', textAlign: 'center' }}>HIGHWAY RACER</h1>
-          
           <button onClick={handleStart} style={{ padding: isMobile ? '15px 40px' : '20px 60px', fontSize: isMobile ? '20px' : '30px', background: '#00ff00', color:'#000', border: 'none', borderRadius: '50px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 20px #00ff00', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
             START RACE
           </button>
