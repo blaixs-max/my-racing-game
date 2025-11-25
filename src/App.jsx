@@ -6,11 +6,21 @@ import { create } from 'zustand';
 
 // ==================== RESPONSIVE HELPER (Debounce Eklendi) ====================
 const useResponsive = () => {
-  const [dimensions, setDimensions] = useState({
-    isMobile: window.innerWidth < 768,
-    isPortrait: window.innerHeight > window.innerWidth,
-    width: window.innerWidth,
-    height: window.innerHeight
+  const [dimensions, setDimensions] = useState(() => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    // Mobil cihaz tespiti: touch desteği veya küçük ekran
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    const isSmallScreen = Math.min(width, height) < 768;
+    const isMobileDevice = isTouchDevice && isSmallScreen;
+    
+    return {
+      isMobile: isMobileDevice,
+      isPortrait: height > width,
+      width: width,
+      height: height,
+      isTouchDevice: isTouchDevice
+    };
   });
 
   useEffect(() => {
@@ -20,11 +30,19 @@ const useResponsive = () => {
       // Debounce: 100ms bekle
       if (timeoutId) clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        // Mobil cihaz tespiti: touch desteği veya küçük ekran (kısa kenar 768'den küçük)
+        const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        const isSmallScreen = Math.min(width, height) < 768;
+        const isMobileDevice = isTouchDevice && isSmallScreen;
+        
         setDimensions({
-          isMobile: window.innerWidth < 768,
-          isPortrait: window.innerHeight > window.innerWidth,
-          width: window.innerWidth,
-          height: window.innerHeight
+          isMobile: isMobileDevice,
+          isPortrait: height > width,
+          width: width,
+          height: height,
+          isTouchDevice: isTouchDevice
         });
       }, 100);
     };
@@ -632,8 +650,8 @@ const MobileControls = memo(({ isLandscape = false }) => {
   }), [startSteering, stopSteering, preventAll]);
 
   // Landscape ve Portrait için boyutlar
-  const buttonSize = isLandscape ? 40 : 50;
-  const indicatorSize = isLandscape ? 35 : 60;
+  const buttonSize = isLandscape ? 45 : 50;
+  const indicatorSize = isLandscape ? 40 : 60;
 
   return (
     <>
@@ -645,7 +663,7 @@ const MobileControls = memo(({ isLandscape = false }) => {
           left: 0, 
           width: isLandscape ? '30%' : '50%', 
           height: '100%', 
-          zIndex: 40, 
+          zIndex: 100, 
           touchAction: 'none',
           userSelect: 'none',
           WebkitUserSelect: 'none',
@@ -661,10 +679,10 @@ const MobileControls = memo(({ isLandscape = false }) => {
         style={{ 
           position: 'fixed', 
           top: 0, 
-          right: isLandscape ? '12%' : 0, 
+          right: isLandscape ? '15%' : 0, 
           width: isLandscape ? '30%' : '50%', 
           height: '100%', 
-          zIndex: 40, 
+          zIndex: 100, 
           touchAction: 'none',
           userSelect: 'none',
           WebkitUserSelect: 'none',
@@ -686,22 +704,22 @@ const MobileControls = memo(({ isLandscape = false }) => {
         onDragStart={preventAll}
         style={{
           position: 'fixed',
-          bottom: isLandscape ? '10px' : '80px',
-          right: isLandscape ? '10px' : '15px',
+          bottom: isLandscape ? '15px' : '80px',
+          right: isLandscape ? '15px' : '15px',
           width: `${buttonSize}px`,
           height: `${buttonSize}px`,
           borderRadius: '50%',
           background: 'linear-gradient(135deg, #ff4500 0%, #ff6600 50%, #ff8c00 100%)',
-          border: isLandscape ? '2px solid #fff' : '3px solid #fff',
-          zIndex: 60,
+          border: '3px solid #fff',
+          zIndex: 150,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: isLandscape ? '7px' : '9px',
+          fontSize: isLandscape ? '8px' : '9px',
           color: '#fff',
           fontWeight: 'bold',
           textAlign: 'center',
-          boxShadow: '0 5px 30px rgba(255,69,0,0.9)',
+          boxShadow: '0 5px 30px rgba(255,69,0,0.9), 0 0 20px rgba(255,69,0,0.5)',
           cursor: 'pointer',
           touchAction: 'none',
           userSelect: 'none',
@@ -717,21 +735,21 @@ const MobileControls = memo(({ isLandscape = false }) => {
       {/* Sol yön göstergesi */}
       <div style={{
         position: 'fixed',
-        bottom: isLandscape ? '10px' : '20px',
-        left: isLandscape ? '10px' : '20px',
+        bottom: isLandscape ? '15px' : '20px',
+        left: isLandscape ? '15px' : '20px',
         width: `${indicatorSize}px`,
         height: `${indicatorSize}px`,
         borderRadius: '50%',
-        background: 'rgba(255,255,255,0.2)',
-        border: isLandscape ? '1px solid rgba(255,255,255,0.4)' : '2px solid rgba(255,255,255,0.3)',
+        background: 'rgba(0,255,255,0.25)',
+        border: '2px solid rgba(0,255,255,0.6)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: isLandscape ? '16px' : '24px',
-        color: 'rgba(255,255,255,0.6)',
+        fontSize: isLandscape ? '18px' : '24px',
+        color: 'rgba(0,255,255,0.9)',
         pointerEvents: 'none',
-        zIndex: 35,
-        boxShadow: '0 2px 10px rgba(0,0,0,0.3)'
+        zIndex: 120,
+        boxShadow: '0 2px 15px rgba(0,255,255,0.4)'
       }}>
         ◀
       </div>
@@ -739,21 +757,21 @@ const MobileControls = memo(({ isLandscape = false }) => {
       {/* Sağ yön göstergesi */}
       <div style={{
         position: 'fixed',
-        bottom: isLandscape ? '10px' : '20px',
-        right: isLandscape ? '60px' : '80px',
+        bottom: isLandscape ? '15px' : '20px',
+        right: isLandscape ? '70px' : '80px',
         width: `${indicatorSize}px`,
         height: `${indicatorSize}px`,
         borderRadius: '50%',
-        background: 'rgba(255,255,255,0.2)',
-        border: isLandscape ? '1px solid rgba(255,255,255,0.4)' : '2px solid rgba(255,255,255,0.3)',
+        background: 'rgba(0,255,255,0.25)',
+        border: '2px solid rgba(0,255,255,0.6)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: isLandscape ? '16px' : '24px',
-        color: 'rgba(255,255,255,0.6)',
+        fontSize: isLandscape ? '18px' : '24px',
+        color: 'rgba(0,255,255,0.9)',
         pointerEvents: 'none',
-        zIndex: 35,
-        boxShadow: '0 2px 10px rgba(0,0,0,0.3)'
+        zIndex: 120,
+        boxShadow: '0 2px 15px rgba(0,255,255,0.4)'
       }}>
         ▶
       </div>
