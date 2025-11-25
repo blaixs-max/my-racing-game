@@ -631,20 +631,9 @@ const MobileControls = memo(({ isLandscape = false }) => {
     onDragStart: preventAll,
   }), [startSteering, stopSteering, preventAll]);
 
-  // Landscape modda nitro butonu konumu
-  const nitroStyle = isLandscape ? {
-    position: 'fixed',
-    bottom: '20px',
-    right: '20px',
-    width: '70px',
-    height: '70px',
-  } : {
-    position: 'fixed',
-    bottom: '80px',
-    right: '15px',
-    width: '50px',
-    height: '50px',
-  };
+  // Landscape ve Portrait için boyutlar
+  const buttonSize = isLandscape ? 40 : 50;
+  const indicatorSize = isLandscape ? 35 : 60;
 
   return (
     <>
@@ -654,7 +643,7 @@ const MobileControls = memo(({ isLandscape = false }) => {
           position: 'fixed', 
           top: 0, 
           left: 0, 
-          width: isLandscape ? '35%' : '50%', 
+          width: isLandscape ? '30%' : '50%', 
           height: '100%', 
           zIndex: 40, 
           touchAction: 'none',
@@ -666,13 +655,14 @@ const MobileControls = memo(({ isLandscape = false }) => {
         }}
         {...handlers(-1)}
       />
+      
       {/* Sağ kontrol alanı */}
       <div
         style={{ 
           position: 'fixed', 
           top: 0, 
-          right: isLandscape ? '15%' : 0, 
-          width: isLandscape ? '35%' : '50%', 
+          right: isLandscape ? '12%' : 0, 
+          width: isLandscape ? '30%' : '50%', 
           height: '100%', 
           zIndex: 40, 
           touchAction: 'none',
@@ -695,15 +685,19 @@ const MobileControls = memo(({ isLandscape = false }) => {
         onSelectStart={preventAll}
         onDragStart={preventAll}
         style={{
-          ...nitroStyle,
+          position: 'fixed',
+          bottom: isLandscape ? '10px' : '80px',
+          right: isLandscape ? '10px' : '15px',
+          width: `${buttonSize}px`,
+          height: `${buttonSize}px`,
           borderRadius: '50%',
           background: 'linear-gradient(135deg, #ff4500 0%, #ff6600 50%, #ff8c00 100%)',
-          border: '3px solid #fff',
-          zIndex: 50,
+          border: isLandscape ? '2px solid #fff' : '3px solid #fff',
+          zIndex: 60,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: isLandscape ? '11px' : '9px',
+          fontSize: isLandscape ? '7px' : '9px',
           color: '#fff',
           fontWeight: 'bold',
           textAlign: 'center',
@@ -720,49 +714,49 @@ const MobileControls = memo(({ isLandscape = false }) => {
         🔥<br/>NITRO
       </div>
       
-      {/* Landscape modda yön göstergeleri */}
-      {isLandscape && (
-        <>
-          <div style={{
-            position: 'fixed',
-            bottom: '20px',
-            left: '20px',
-            width: '60px',
-            height: '60px',
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.15)',
-            border: '2px solid rgba(255,255,255,0.3)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '24px',
-            color: 'rgba(255,255,255,0.5)',
-            pointerEvents: 'none',
-            zIndex: 35
-          }}>
-            ◀
-          </div>
-          <div style={{
-            position: 'fixed',
-            bottom: '20px',
-            right: '100px',
-            width: '60px',
-            height: '60px',
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.15)',
-            border: '2px solid rgba(255,255,255,0.3)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '24px',
-            color: 'rgba(255,255,255,0.5)',
-            pointerEvents: 'none',
-            zIndex: 35
-          }}>
-            ▶
-          </div>
-        </>
-      )}
+      {/* Sol yön göstergesi */}
+      <div style={{
+        position: 'fixed',
+        bottom: isLandscape ? '10px' : '20px',
+        left: isLandscape ? '10px' : '20px',
+        width: `${indicatorSize}px`,
+        height: `${indicatorSize}px`,
+        borderRadius: '50%',
+        background: 'rgba(255,255,255,0.2)',
+        border: isLandscape ? '1px solid rgba(255,255,255,0.4)' : '2px solid rgba(255,255,255,0.3)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: isLandscape ? '16px' : '24px',
+        color: 'rgba(255,255,255,0.6)',
+        pointerEvents: 'none',
+        zIndex: 35,
+        boxShadow: '0 2px 10px rgba(0,0,0,0.3)'
+      }}>
+        ◀
+      </div>
+      
+      {/* Sağ yön göstergesi */}
+      <div style={{
+        position: 'fixed',
+        bottom: isLandscape ? '10px' : '20px',
+        right: isLandscape ? '60px' : '80px',
+        width: `${indicatorSize}px`,
+        height: `${indicatorSize}px`,
+        borderRadius: '50%',
+        background: 'rgba(255,255,255,0.2)',
+        border: isLandscape ? '1px solid rgba(255,255,255,0.4)' : '2px solid rgba(255,255,255,0.3)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: isLandscape ? '16px' : '24px',
+        color: 'rgba(255,255,255,0.6)',
+        pointerEvents: 'none',
+        zIndex: 35,
+        boxShadow: '0 2px 10px rgba(0,0,0,0.3)'
+      }}>
+        ▶
+      </div>
       
       <style>{`
         @keyframes pulseNitro {
@@ -1411,6 +1405,7 @@ function Game() {
   } = useGameStore();
   
   const { isMobile, isPortrait } = useResponsive();
+  const isLandscape = isMobile && !isPortrait;
   
   // FIX 4: Component unmount'ta timer cleanup
   useEffect(() => {
@@ -1657,8 +1652,8 @@ function Game() {
       )}
 
       {/* HUD - Speedometer */}
-      <div style={{ position: 'absolute', top: isMobile ? '3px' : '20px', left: isMobile ? '3px' : '20px', zIndex: 10, pointerEvents: 'none' }}>
-        <div style={{ transform: isMobile ? 'scale(0.35)' : 'scale(1)', transformOrigin: 'top left' }}>
+      <div style={{ position: 'absolute', top: isLandscape ? '3px' : (isMobile ? '3px' : '20px'), left: isLandscape ? '3px' : (isMobile ? '3px' : '20px'), zIndex: 10, pointerEvents: 'none' }}>
+        <div style={{ transform: isLandscape ? 'scale(0.28)' : (isMobile ? 'scale(0.35)' : 'scale(1)'), transformOrigin: 'top left' }}>
           <Speedometer speed={speed} />
         </div>
       </div>
@@ -1666,21 +1661,21 @@ function Game() {
       {/* Score */}
       <div style={{ 
         position: 'fixed',
-        top: isMobile ? '5px' : '20px',
-        right: isMobile ? '5px' : '20px',
+        top: isLandscape ? '3px' : (isMobile ? '5px' : '20px'),
+        right: isLandscape ? '3px' : (isMobile ? '5px' : '20px'),
         background: 'linear-gradient(135deg, #333 0%, #000 100%)',
-        border: '2px solid #555', 
-        borderRadius: isMobile ? '5px' : '10px', 
-        padding: isMobile ? '3px 8px' : '10px 30px',
+        border: isLandscape ? '1px solid #555' : '2px solid #555', 
+        borderRadius: isLandscape ? '3px' : (isMobile ? '5px' : '10px'), 
+        padding: isLandscape ? '2px 5px' : (isMobile ? '3px 8px' : '10px 30px'),
         transform: 'skewX(-15deg)', 
         zIndex: 10, 
         color: '#fff', 
         textAlign: 'right', 
         boxShadow: '0 5px 15px rgba(0,0,0,0.5)',
-        fontSize: isMobile ? '0.6em' : '1em'
+        fontSize: isLandscape ? '0.5em' : (isMobile ? '0.6em' : '1em')
       }}>
-        <div style={{ fontSize: isMobile ? '8px' : '12px', ...scoreStyle, transform: 'skewX(15deg)' }}>SCORE</div>
-        <div style={{ fontSize: isMobile ? '16px' : '40px', ...scoreStyle, transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
+        <div style={{ fontSize: isLandscape ? '6px' : (isMobile ? '8px' : '12px'), ...scoreStyle, transform: 'skewX(15deg)' }}>SCORE</div>
+        <div style={{ fontSize: isLandscape ? '12px' : (isMobile ? '16px' : '40px'), ...scoreStyle, transform: 'skewX(15deg)' }}>{Math.floor(score)}</div>
       </div>
 
       {/* Nitro Bar */}
@@ -1688,19 +1683,19 @@ function Game() {
         <>
           <div style={{
             position: 'fixed',
-            top: isMobile ? '5px' : '20px',
+            top: isLandscape ? '3px' : (isMobile ? '5px' : '20px'),
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 10,
             pointerEvents: 'none'
           }}>
             <div style={{
-              width: isMobile ? '140px' : '300px',
-              height: isMobile ? '35px' : '70px',
+              width: isLandscape ? '100px' : (isMobile ? '140px' : '300px'),
+              height: isLandscape ? '22px' : (isMobile ? '35px' : '70px'),
               background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)',
-              border: nitro >= 100 ? '2px solid #ff6600' : '2px solid #ff9933',
-              borderRadius: isMobile ? '18px' : '35px',
-              padding: isMobile ? '2px' : '5px',
+              border: nitro >= 100 ? (isLandscape ? '1px solid #ff6600' : '2px solid #ff6600') : (isLandscape ? '1px solid #ff9933' : '2px solid #ff9933'),
+              borderRadius: isLandscape ? '11px' : (isMobile ? '18px' : '35px'),
+              padding: isLandscape ? '1px' : (isMobile ? '2px' : '5px'),
               boxShadow: nitro >= 100 
                 ? '0 5px 30px rgba(255,102,0,0.9), 0 0 40px rgba(255,69,0,0.7)' 
                 : '0 5px 20px rgba(255,153,51,0.6)',
@@ -1712,13 +1707,13 @@ function Game() {
                 top: '50%',
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
-                fontSize: isMobile ? '14px' : '30px',
+                fontSize: isLandscape ? '10px' : (isMobile ? '14px' : '30px'),
                 fontWeight: 'bold',
                 color: nitro >= 100 ? '#fff' : '#666',
                 zIndex: 2,
                 textShadow: nitro >= 100 ? '0 0 10px #fff, 0 0 20px #ff6600' : 'none',
                 fontFamily: 'Impact, Arial Black, sans-serif',
-                letterSpacing: '2px',
+                letterSpacing: isLandscape ? '1px' : '2px',
                 userSelect: 'none',
                 pointerEvents: 'none'
               }}>
@@ -1733,7 +1728,7 @@ function Game() {
                   : isNitroActive 
                     ? 'linear-gradient(90deg, #ff9933 0%, #ffaa55 100%)'
                     : 'linear-gradient(90deg, #ff9933 0%, #ff7722 100%)',
-                borderRadius: isMobile ? '15px' : '30px',
+                borderRadius: isLandscape ? '10px' : (isMobile ? '15px' : '30px'),
                 transition: 'width 0.1s ease-out, background 0.3s ease',
                 boxShadow: nitro >= 100
                   ? '0 0 30px rgba(255,102,0,1), inset 0 0 20px rgba(255,69,0,0.8)'
@@ -1753,21 +1748,21 @@ function Game() {
           {/* Distance */}
           <div style={{ 
             position: 'fixed',
-            top: isMobile ? '70px' : '120px',
-            right: isMobile ? '5px' : '20px',
+            top: isLandscape ? '28px' : (isMobile ? '70px' : '120px'),
+            right: isLandscape ? '3px' : (isMobile ? '5px' : '20px'),
             zIndex: 10
           }}>
             <div style={{ 
               background: 'linear-gradient(135deg, #1a1a2e 0%, #0f0f1a 100%)',
-              border: '2px solid #00ffff', 
-              borderRadius: isMobile ? '4px' : '10px', 
-              padding: isMobile ? '3px 8px' : '8px 20px',
+              border: isLandscape ? '1px solid #00ffff' : '2px solid #00ffff', 
+              borderRadius: isLandscape ? '3px' : (isMobile ? '4px' : '10px'), 
+              padding: isLandscape ? '2px 5px' : (isMobile ? '3px 8px' : '8px 20px'),
               transform: 'skewX(-15deg)',
               boxShadow: '0 5px 15px rgba(0,255,255,0.3)'
             }}>
               <div style={{ transform: 'skewX(15deg)', textAlign: 'center' }}>
-                <div style={{ fontSize: isMobile ? '7px' : '10px', color: '#00ffff', fontWeight: 'bold' }}>DISTANCE</div>
-                <div style={{ fontSize: isMobile ? '12px' : '24px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #00ffff' }}>{Math.floor(totalDistance)}m</div>
+                <div style={{ fontSize: isLandscape ? '5px' : (isMobile ? '7px' : '10px'), color: '#00ffff', fontWeight: 'bold' }}>DISTANCE</div>
+                <div style={{ fontSize: isLandscape ? '9px' : (isMobile ? '12px' : '24px'), color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #00ffff' }}>{Math.floor(totalDistance)}m</div>
               </div>
             </div>
           </div>
@@ -1775,21 +1770,21 @@ function Game() {
           {/* Near Miss */}
           <div style={{ 
             position: 'fixed',
-            top: isMobile ? '105px' : '190px',
-            right: isMobile ? '5px' : '20px',
+            top: isLandscape ? '52px' : (isMobile ? '105px' : '190px'),
+            right: isLandscape ? '3px' : (isMobile ? '5px' : '20px'),
             zIndex: 10
           }}>
             <div style={{ 
               background: 'linear-gradient(135deg, #2e1a1a 0%, #1a0f0f 100%)',
-              border: '2px solid #ff00ff', 
-              borderRadius: isMobile ? '4px' : '10px', 
-              padding: isMobile ? '3px 8px' : '8px 20px',
+              border: isLandscape ? '1px solid #ff00ff' : '2px solid #ff00ff', 
+              borderRadius: isLandscape ? '3px' : (isMobile ? '4px' : '10px'), 
+              padding: isLandscape ? '2px 5px' : (isMobile ? '3px 8px' : '8px 20px'),
               transform: 'skewX(-15deg)',
               boxShadow: '0 5px 15px rgba(255,0,255,0.3)'
             }}>
               <div style={{ transform: 'skewX(15deg)', textAlign: 'center' }}>
-                <div style={{ fontSize: isMobile ? '7px' : '10px', color: '#ff00ff', fontWeight: 'bold' }}>NEAR MISS</div>
-                <div style={{ fontSize: isMobile ? '12px' : '24px', color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #ff00ff' }}>{nearMissCount}</div>
+                <div style={{ fontSize: isLandscape ? '5px' : (isMobile ? '7px' : '10px'), color: '#ff00ff', fontWeight: 'bold' }}>NEAR MISS</div>
+                <div style={{ fontSize: isLandscape ? '9px' : (isMobile ? '12px' : '24px'), color: '#fff', fontWeight: 'bold', textShadow: '0 0 10px #ff00ff' }}>{nearMissCount}</div>
               </div>
             </div>
           </div>
