@@ -1,8 +1,124 @@
 import React, { useRef, useEffect, useState, Suspense, useMemo, useCallback, memo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { PerspectiveCamera, Stars } from '@react-three/drei';
+import { PerspectiveCamera, Stars, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { create } from 'zustand';
+
+// ==================== 3D MODEL CONFIGURATION ====================
+// CDN'den yüklenecek 3D modeller (GLB formatında)
+// Not: Bu URL'ler değiştirilebilir - kendi modellerinizi ekleyebilirsiniz
+const MODEL_CONFIG = {
+  enabled: true, // 3D modelleri kullan (false = fallback box geometri)
+  
+  // Ücretsiz CC0 model kaynakları:
+  // - https://poly.pizza (API ile)
+  // - https://kenney.nl/assets
+  // - https://quaternius.com
+  // - https://github.com/KhronosGroup/glTF-Sample-Assets
+  
+  // ÖNEMLİ: Model URL'lerini buraya ekleyin!
+  // Örnek çalışan URL'ler (Khronos Sample Assets - ToyCar):
+  // 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/ToyCar/glTF-Binary/ToyCar.glb'
+  
+  models: {
+    // Oyuncu araçları
+    player: {
+      // ToyCar modeli test için - CC0 lisans
+      default: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/ToyCar/glTF-Binary/ToyCar.glb',
+      sport: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/ToyCar/glTF-Binary/ToyCar.glb',
+      muscle: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/ToyCar/glTF-Binary/ToyCar.glb',
+    },
+    // Trafik araçları - şimdilik null (fallback kullanılacak)
+    // Kendi modellerinizi ekleyebilirsiniz
+    traffic: {
+      sedan: null, // Örnek: 'https://example.com/sedan.glb'
+      truck: null,
+      bus: null,
+      police: null,
+      ambulance: null,
+      sport: null,
+    }
+  },
+  
+  // Model ölçekleri (her model için ayarlanabilir)
+  scales: {
+    player: { default: 1.5, sport: 1.5, muscle: 1.6 }, // ToyCar için ölçek
+    traffic: { sedan: 0.9, truck: 1.2, bus: 1.5, police: 0.9, ambulance: 1.0, sport: 0.85 }
+  },
+  
+  // Model Y offset (yerden yükseklik)
+  yOffset: {
+    player: { default: 0.3, sport: 0.3, muscle: 0.3 },
+    traffic: { sedan: 0, truck: 0, bus: 0, police: 0, ambulance: 0, sport: 0 }
+  }
+};
+
+// Model önbelleği - yüklenen modelleri saklar
+const modelCache = new Map();
+
+// ==================== 3D MODEL LOADER COMPONENT ====================
+const Model3D = memo(({ url, scale = 1, position = [0, 0, 0], rotation = [0, 0, 0], fallback }) => {
+  const [error, setError] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  
+  // URL yoksa veya hata varsa fallback göster
+  if (!url || error) {
+    return fallback || null;
+  }
+  
+  return (
+    <Suspense fallback={fallback}>
+      <ModelLoader 
+        url={url} 
+        scale={scale} 
+        position={position} 
+        rotation={rotation}
+        onError={() => setError(true)}
+        onLoad={() => setLoaded(true)}
+      />
+    </Suspense>
+  );
+});
+
+Model3D.displayName = 'Model3D';
+
+// Asıl model yükleyici
+const ModelLoader = memo(({ url, scale, position, rotation, onError, onLoad }) => {
+  const group = useRef();
+  
+  try {
+    const { scene } = useGLTF(url, true);
+    
+    useEffect(() => {
+      if (scene) {
+        onLoad?.();
+      }
+    }, [scene, onLoad]);
+    
+    const clonedScene = useMemo(() => {
+      const clone = scene.clone();
+      clone.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+      return clone;
+    }, [scene]);
+    
+    return (
+      <group ref={group} position={position} rotation={rotation} scale={[scale, scale, scale]}>
+        <primitive object={clonedScene} />
+      </group>
+    );
+  } catch (e) {
+    console.warn('Model yükleme hatası:', url, e);
+    onError?.();
+    return null;
+  }
+});
+
+ModelLoader.displayName = 'ModelLoader';
 
 // ==================== RESPONSIVE HELPER (Debounce Eklendi) ====================
 const useResponsive = () => {
@@ -939,13 +1055,14 @@ function PlayerCar() {
     };
   }, [materials]);
 
-  return (
-    <group ref={group} position={[0, 0.1, -2]}>
-      <primitive object={leftTarget.current} />
-      <primitive object={rightTarget.current} />
-      <spotLight position={[0.8, 0.6, -1.5]} target={rightTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} />
-      <spotLight position={[-0.8, 0.6, -1.5]} target={leftTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} />
-      
+  // Model URL'i al
+  const modelUrl = MODEL_CONFIG.enabled ? MODEL_CONFIG.models.player[selectedCar] : null;
+  const modelScale = MODEL_CONFIG.scales.player[selectedCar] || 0.8;
+  const modelYOffset = MODEL_CONFIG.yOffset.player[selectedCar] || 0.1;
+
+  // Fallback box geometry (model yoksa kullanılır)
+  const FallbackPlayerCar = useMemo(() => (
+    <>
       <mesh position={[0, 0.4, 0]} material={materials.body}><boxGeometry args={[1.8, 0.5, 4.2]} /></mesh>
       <mesh position={[-0.95, 0.3, 1.2]} material={materials.body}><boxGeometry args={[0.4, 0.4, 1.2]} /></mesh>
       <mesh position={[0.95, 0.3, 1.2]} material={materials.body}><boxGeometry args={[0.4, 0.4, 1.2]} /></mesh>
@@ -958,12 +1075,33 @@ function PlayerCar() {
       <mesh position={[0, 0.2, 0]} material={materials.neon}><boxGeometry args={[1.7, 0.05, 4.1]} /></mesh>
       <mesh position={[-0.6, 0.5, 2.11]} material={materials.tailLight}><boxGeometry args={[0.4, 0.15, 0.1]} /></mesh>
       <mesh position={[0.6, 0.5, 2.11]} material={materials.tailLight}><boxGeometry args={[0.4, 0.15, 0.1]} /></mesh>
-
       {[[-1.0, -1.2], [1.0, -1.2], [-1.0, 1.4], [1.0, 1.4]].map((pos, i) => (
         <mesh key={i} ref={el => wheels.current[i] = el} position={[pos[0], 0.35, pos[1]]} rotation={[0, 0, Math.PI/2]} material={materials.wheel}>
           <cylinderGeometry args={[0.4, 0.4, 0.4, 24]} />
         </mesh>
       ))}
+    </>
+  ), [materials, wheels]);
+
+  return (
+    <group ref={group} position={[0, 0.1, -2]}>
+      <primitive object={leftTarget.current} />
+      <primitive object={rightTarget.current} />
+      <spotLight position={[0.8, 0.6, -1.5]} target={rightTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} />
+      <spotLight position={[-0.8, 0.6, -1.5]} target={leftTarget.current} angle={0.3} penumbra={0.2} intensity={120} color="#fff" distance={250} />
+      
+      {/* 3D Model veya Fallback */}
+      {modelUrl ? (
+        <Model3D 
+          url={modelUrl} 
+          scale={modelScale} 
+          position={[0, modelYOffset, 0]}
+          rotation={[0, Math.PI, 0]}
+          fallback={FallbackPlayerCar}
+        />
+      ) : (
+        FallbackPlayerCar
+      )}
     </group>
   );
 }
@@ -1017,6 +1155,68 @@ const Coins = memo(() => {
 Coins.displayName = 'Coins';
 
 // ==================== TRAFİK ====================
+// Tek bir araç için fallback box geometri oluşturucu
+const TrafficCarFallback = memo(({ type, materials }) => {
+  switch(type) {
+    case 'truck':
+      return (
+        <group>
+          <mesh position={[0, 2.0, 0]} material={materials.container}><boxGeometry args={[2.6, 3.2, 7.5]} /></mesh>
+          <mesh position={[0, 1.2, -4.2]} material={materials.truck}><boxGeometry args={[2.6, 2.2, 2.0]} /></mesh>
+          <mesh position={[-1, 1.0, 3.8]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
+          <mesh position={[1, 1.0, 3.8]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
+        </group>
+      );
+    case 'bus':
+      return (
+        <group>
+          <mesh position={[0, 2.0, 0]} material={materials.bus}><boxGeometry args={[2.7, 3.4, 10.0]} /></mesh>
+          <mesh position={[-1, 1.0, 5.1]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
+          <mesh position={[1, 1.0, 5.1]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
+        </group>
+      );
+    case 'sedan':
+      return (
+        <group>
+          <mesh position={[0, 0.7, 0]} material={materials.sedan}><boxGeometry args={[2.0, 0.8, 4.2]} /></mesh>
+          <mesh position={[-0.8, 0.6, 2.2]} material={materials.tailLight}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
+          <mesh position={[0.8, 0.6, 2.2]} material={materials.tailLight}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
+        </group>
+      );
+    case 'police':
+      return (
+        <group>
+          <mesh position={[0, 0.7, 0]} material={materials.police}><boxGeometry args={[2.0, 0.8, 4.2]} /></mesh>
+          <mesh position={[-0.8, 0.6, 2.2]} material={materials.tailLight}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
+          <mesh position={[0.8, 0.6, 2.2]} material={materials.tailLight}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
+          <mesh position={[0, 1.2, -0.5]} material={materials.policeLight}><boxGeometry args={[0.3, 0.2, 0.3]} /></mesh>
+        </group>
+      );
+    case 'ambulance':
+      return (
+        <group>
+          <mesh position={[0, 1.5, 0]} material={materials.ambulance}><boxGeometry args={[2.2, 2.5, 5.0]} /></mesh>
+          <mesh position={[-0.9, 1.0, 2.6]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
+          <mesh position={[0.9, 1.0, 2.6]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
+          <mesh position={[0, 2.8, 0]} material={materials.ambulanceLight}><boxGeometry args={[0.4, 0.3, 0.4]} /></mesh>
+        </group>
+      );
+    case 'sport':
+      return (
+        <group>
+          <mesh position={[0, 0.5, 0]} material={materials.sport}><boxGeometry args={[1.8, 0.6, 4.0]} /></mesh>
+          <mesh position={[0, 0.9, 0.5]} material={materials.sedan}><boxGeometry args={[1.4, 0.4, 1.5]} /></mesh>
+          <mesh position={[-0.7, 0.5, 2.1]} material={materials.tailLight}><boxGeometry args={[0.3, 0.2, 0.1]} /></mesh>
+          <mesh position={[0.7, 0.5, 2.1]} material={materials.tailLight}><boxGeometry args={[0.3, 0.2, 0.1]} /></mesh>
+        </group>
+      );
+    default:
+      return null;
+  }
+});
+
+TrafficCarFallback.displayName = 'TrafficCarFallback';
+
 const Traffic = memo(() => {
   const enemies = useGameStore(state => state.enemies);
   
@@ -1045,53 +1245,26 @@ const Traffic = memo(() => {
         const x = enemy.x; 
         const tilt = enemy.isChanging ? (enemy.targetLane > enemy.lane ? -0.1 : 0.1) : 0;
         
+        // 3D model URL'i kontrol et
+        const modelUrl = MODEL_CONFIG.enabled ? MODEL_CONFIG.models.traffic[enemy.type] : null;
+        const modelScale = MODEL_CONFIG.scales.traffic[enemy.type] || 1;
+        const modelYOffset = MODEL_CONFIG.yOffset.traffic[enemy.type] || 0;
+        
+        // Fallback component
+        const fallbackComponent = <TrafficCarFallback type={enemy.type} materials={materials} />;
+        
         return (
           <group key={enemy.id} position={[x, 0, enemy.z]} rotation={[0, 0, tilt]}>
-            {enemy.type === 'truck' && (
-              <group>
-                <mesh position={[0, 2.0, 0]} material={materials.container}><boxGeometry args={[2.6, 3.2, 7.5]} /></mesh>
-                <mesh position={[0, 1.2, -4.2]} material={materials.truck}><boxGeometry args={[2.6, 2.2, 2.0]} /></mesh>
-                <mesh position={[-1, 1.0, 3.8]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
-                <mesh position={[1, 1.0, 3.8]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
-              </group>
-            )}
-            {enemy.type === 'bus' && (
-              <group>
-                <mesh position={[0, 2.0, 0]} material={materials.bus}><boxGeometry args={[2.7, 3.4, 10.0]} /></mesh>
-                <mesh position={[-1, 1.0, 5.1]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
-                <mesh position={[1, 1.0, 5.1]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
-              </group>
-            )}
-            {enemy.type === 'sedan' && (
-              <group>
-                <mesh position={[0, 0.7, 0]} material={materials.sedan}><boxGeometry args={[2.0, 0.8, 4.2]} /></mesh>
-                <mesh position={[-0.8, 0.6, 2.2]} material={materials.tailLight}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
-                <mesh position={[0.8, 0.6, 2.2]} material={materials.tailLight}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
-              </group>
-            )}
-            {enemy.type === 'police' && (
-              <group>
-                <mesh position={[0, 0.7, 0]} material={materials.police}><boxGeometry args={[2.0, 0.8, 4.2]} /></mesh>
-                <mesh position={[-0.8, 0.6, 2.2]} material={materials.tailLight}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
-                <mesh position={[0.8, 0.6, 2.2]} material={materials.tailLight}><boxGeometry args={[0.4, 0.2, 0.1]} /></mesh>
-                <mesh position={[0, 1.2, -0.5]} material={materials.policeLight}><boxGeometry args={[0.3, 0.2, 0.3]} /></mesh>
-              </group>
-            )}
-            {enemy.type === 'ambulance' && (
-              <group>
-                <mesh position={[0, 1.5, 0]} material={materials.ambulance}><boxGeometry args={[2.2, 2.5, 5.0]} /></mesh>
-                <mesh position={[-0.9, 1.0, 2.6]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
-                <mesh position={[0.9, 1.0, 2.6]} material={materials.tailLight}><boxGeometry args={[0.3, 0.3, 0.1]} /></mesh>
-                <mesh position={[0, 2.8, 0]} material={materials.ambulanceLight}><boxGeometry args={[0.4, 0.3, 0.4]} /></mesh>
-              </group>
-            )}
-            {enemy.type === 'sport' && (
-              <group>
-                <mesh position={[0, 0.5, 0]} material={materials.sport}><boxGeometry args={[1.8, 0.6, 4.0]} /></mesh>
-                <mesh position={[0, 0.9, 0.5]} material={materials.sedan}><boxGeometry args={[1.4, 0.4, 1.5]} /></mesh>
-                <mesh position={[-0.7, 0.5, 2.1]} material={materials.tailLight}><boxGeometry args={[0.3, 0.2, 0.1]} /></mesh>
-                <mesh position={[0.7, 0.5, 2.1]} material={materials.tailLight}><boxGeometry args={[0.3, 0.2, 0.1]} /></mesh>
-              </group>
+            {modelUrl ? (
+              <Model3D 
+                url={modelUrl}
+                scale={modelScale}
+                position={[0, modelYOffset, 0]}
+                rotation={[0, 0, 0]}
+                fallback={fallbackComponent}
+              />
+            ) : (
+              fallbackComponent
             )}
           </group>
         );
